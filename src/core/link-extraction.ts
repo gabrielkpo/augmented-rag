@@ -191,8 +191,13 @@ export type LinkResolutionType = 'qualified' | 'unqualified';
  * auto-link, and addLinksBatch's INNER JOINs as the final backstop). The
  * whitelist survives only as the typed fast-path for pass-2b wikilinks;
  * non-whitelisted `[[dir/...]]` get equivalent treatment in pass 2c.
+ *
+ * Local extension (2026-08-06, kept through the v0.48 rebase): systems,
+ * originals, processes, process, notes, preferences, log — the doctrine
+ * layer of this brain. Upstream's #2576 fix means these would resolve via
+ * pass 2c anyway; they stay listed so they keep the typed fast path.
  */
-const DIR_PATTERN = '(?:people|companies|meetings|concepts|deal|civic|project|projects|source|media|yc|tech|finance|personal|openclaw|entities|reference)';
+const DIR_PATTERN = '(?:people|companies|meetings|concepts|deal|civic|project|projects|source|media|yc|tech|finance|personal|openclaw|entities|reference|systems|originals|processes|process|notes|preferences|log)';
 
 /**
  * #2576 (bug 2): a plausible top-level slug directory — lowercase alnum
