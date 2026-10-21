@@ -140,7 +140,13 @@ export async function applyReranker(
   // small physical batch never 500s on an oversized code/hex-heavy chunk.
   // Token-aware, not just char-capped, because hex-dense pages tokenize at
   // ~1 char/token. See capRerankDoc for what this costs hosted providers.
-  const documents = head.map(r => capRerankDoc(r.chunk_text || r.title || ''));
+  // Local change (2026-10-21): prefix the page title so the reranker judges a
+  // chunk with the same context its embedding got (contextual retrieval
+  // `title` tier). Without it a chunk that never names its subject reads as
+  // "same topic, no specific answer" and sinks below weaker matches.
+  const documents = head.map(r => capRerankDoc(
+    r.chunk_text ? (r.title ? `${r.title}\n\n${r.chunk_text}` : r.chunk_text) : (r.title || ''),
+  ));
 
   let reranked: RerankResult[];
   let rerankMeta: RerankMeta | undefined;
@@ -236,9 +242,10 @@ export async function applyReranker(
     }
     start = end;
   }
+  const fusedOrder = fuseRerankWithInputOrder(ordered);
   const seen = new Set<number>();
   const reorderedHead: SearchResult[] = [];
-  for (const r of ordered) {
+  for (const r of fusedOrder) {
     if (r.index >= 0 && r.index < head.length && !seen.has(r.index)) {
       seen.add(r.index);
       const item = head[r.index]!;
@@ -268,4 +275,34 @@ export async function applyReranker(
   return opts.topNOut !== null && opts.topNOut > 0
     ? combined.slice(0, opts.topNOut)
     : combined;
+}
+
+/**
+ * Local change (2026-10-21): optionally fuse the reranker's order with the
+ * fused (input) order instead of replacing it.
+ *
+ * Measured on a 107-question bench: the hybrid order and the Jev order each
+ * miss questions the other gets right (7 found only by one, 7 only by the
+ * other), so letting the reranker overrule the hybrid order outright throws
+ * away half the signal. With `GBRAIN_RERANK_FUSION=rrf` both rankings vote by
+ * reciprocal rank: weight / (k + rank). `GBRAIN_RERANK_FUSION_K` (default 20)
+ * sets how flat the vote is, `GBRAIN_RERANK_FUSION_WEIGHT` (default 1) is the
+ * reranker's weight against the hybrid order's 1. Unset keeps upstream
+ * behaviour (the reranker order wins).
+ */
+export function fuseRerankWithInputOrder(
+  rerankOrder: RerankResult[],
+  env: Record<string, string | undefined> = process.env,
+): RerankResult[] {
+  if ((env.GBRAIN_RERANK_FUSION ?? '').toLowerCase() !== 'rrf') return rerankOrder;
+  const kRaw = Number(env.GBRAIN_RERANK_FUSION_K);
+  const k = Number.isFinite(kRaw) && kRaw >= 0 ? kRaw : 20;
+  const wRaw = Number(env.GBRAIN_RERANK_FUSION_WEIGHT);
+  const weight = Number.isFinite(wRaw) && wRaw >= 0 ? wRaw : 1;
+  const vote = (r: RerankResult, rerankRank: number) =>
+    1 / (k + r.index + 1) + weight / (k + rerankRank + 1);
+  return rerankOrder
+    .map((r, rerankRank) => ({ r, s: vote(r, rerankRank) }))
+    .sort((a, b) => b.s - a.s || a.r.index - b.r.index)
+    .map(x => x.r);
 }

@@ -64,6 +64,10 @@ graphify-out/
 # run-serial-tests.sh / run-e2e.sh; merged by scripts/merge-lcov.ts)
 .coverage/
 
+brain/.export-manifest.json
 # Local eval run ledger (gbrain eval run-all / longmemeval / canary --record);
 # each machine keeps its own, so it is never committed.
 /.gbrain-evals/eval-results.jsonl
+
+# local results of the search bench
+ops/eval/results/

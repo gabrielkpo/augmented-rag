@@ -109,6 +109,7 @@ describe('applyReranker applies the cap to every document', () => {
     expect(docs).toHaveLength(2);
     expect(docs[0].length).toBeLessThanOrEqual(MAX_DOC_CHARS);
     expect(estimateTokens(docs[0])).toBeLessThanOrEqual(MAX_DOC_TOKENS);
-    expect(docs[1]).toBe('tiny');
+    // Local change: the reranker sees the page title before the chunk text.
+    expect(docs[1]).toBe('Doc 1\n\ntiny');
   });
 });
