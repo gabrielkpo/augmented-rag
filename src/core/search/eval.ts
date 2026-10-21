@@ -15,6 +15,7 @@ import { loadConfig, loadConfigWithEngine } from '../config.ts';
 import { resolveEmbeddingColumn } from './embedding-column.ts';
 import { hybridSearch } from './hybrid.ts';
 import type { HybridSearchOpts } from './hybrid.ts';
+import { expandQuery } from './expansion.ts';
 import { dedupeRankedKeys } from '../eval/ranked-docs.ts';
 
 // ─────────────────────────────────────────────────────────────────
@@ -259,6 +260,9 @@ async function runQuery(
   const hybridOpts: HybridSearchOpts = {
     limit,
     expansion: config.expand ?? false,
+    // The expansion stage runs only when an expandFn is supplied
+    // (hybrid/arms.ts); without it `--expand` was a silent no-op.
+    expandFn: config.expand ? expandQuery : undefined,
     rrfK: config.rrf_k,
     dedupOpts,
   };
