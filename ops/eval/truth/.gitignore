@@ -1,0 +1,6 @@
+# Working files (pairs, raw verdicts): the versioned summary is supersessions.json.
+work/
+# Agentic bench answers (brain content) and runs degraded by machine load.
+results/agentic-*/
+results/*-serve.log
+results/juge-sonnet/

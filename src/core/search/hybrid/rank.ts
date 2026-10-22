@@ -32,6 +32,7 @@ import { isRelationalQuery } from '../relational-plan.ts';
 import { pushDegraded, stampBudgetStage } from './degraded.ts';
 import { requiresSafeChunks } from '../safe-chunks.ts';
 import { stampEvidence } from '../evidence.ts';
+import { applyPageSupersession } from './supersession.ts';
 
 /** RRF over every role-tagged arm, cosine rescore, then the post-fusion boosts. */
 export async function fuseArms(
@@ -357,7 +358,7 @@ export async function rerankAndPin(
   const rerankPinned = reranked !== deduped && effectiveModality !== 'image'
     ? pinRelationalRows(ordered, relationalList, { max: resolvedMode.relational_rerank_pin, fusedOrder: deduped, onPin: (d) => { relationalRerankPin = d; } })
     : ordered;
-  return { rerankPinned: prioritize(req, rerankPinned), relationalRerankPin, rerankGate, identityLookups: gate.lookups };
+  return { rerankPinned: await applyPageSupersession(req, prioritize(req, rerankPinned)), relationalRerankPin, rerankGate, identityLookups: gate.lookups };
 }
 
 /** Alias hop + exact-lookup tier, evidence stamp, adaptive return, autocut and the relational evidence slot. */
