@@ -1,0 +1,22 @@
+version: 2
+updates:
+  # Security updates only: version bumps of upstream's dependencies would make
+  # every upstream merge conflict on package.json and bun.lock. Dependabot alerts
+  # and security PRs still apply.
+  - package-ecosystem: bun
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+    commit-message:
+      prefix: "chore(deps)"
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    # Conventional Commits titles, so the PR title check passes; one grouped PR per week
+    commit-message:
+      prefix: "chore(ci)"
+    groups:
+      actions:
+        patterns: ["*"]
