@@ -12,8 +12,8 @@ person, partner, concept, original, note):
                person/person pairs are dropped, as a shared writing style
                brings them close without them being about the same entity.
   alias      : an alias of one page is the name of another (slug tail, title
-               or alias), e.g. projects/ticket-automation has the alias
-               "ticket-agent".
+               or alias), e.g. projects/report-builder has the alias
+               "report-bot".
   bandeau    (banner): a page declares itself stale ("périmé", "obsolète",
                "n'est plus à jour"...); it is paired with its 3 nearest neighbours.
   fraîcheur  (freshness): the ops/freshness indicator (summary older than its
