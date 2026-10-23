@@ -8,6 +8,10 @@
 
 > **Status:** first research round complete (21 to 23 October 2026); the patches run daily on one brain. They are not merged upstream and will move with upstream releases. The method and every number are in [docs/fork/research/](docs/fork/research/README.md).
 
+## Why
+
+gbrain's defaults are tuned on its author's brain and on public benchmarks. On a different corpus (chat threads, meeting notes, project pages, mostly in French), the right page was in the top 5 for only 68% of real questions. The fork measures before it changes anything, under one rule: **gbrain indexes, Claude reasons** (gbrain calls no chat model; anything that writes or judges goes through Claude, outside gbrain).
+
 ## What is upstream, what is ours
 
 | Upstream gbrain (Garry Tan and contributors) | This fork |
@@ -21,20 +25,29 @@ The full list of fork commits is in appendix B of the [write-up](docs/fork/resea
 
 ## Method
 
-The study treats each idea as a hypothesis to test, not a feature to add:
+Each idea is a hypothesis to test, not a feature to add:
 
 1. **Benches first.** Question sets in gbrain's native qrels format: a tuning bench (107 questions, half of them real queries from agent sessions), holdout A (41) to validate a choice, holdout B (41) opened once at the end. No question is shared between them.
 2. **One change at a time**, measured with Recall@5, MRR and nDCG@5 against the previous configuration.
 3. **Isolated labs.** Index changes run on fresh lab brains built from a snapshot, never on the live brain.
 4. **Paired bootstrap confidence intervals** for every comparison; a gain inside the noise counts as no gain.
 5. **End-to-end check.** A multi-step bench where Claude answers with read-only gbrain tools and a second model judges the answers against verified references.
-6. **Negative results are kept.** Five of the ideas tested brought nothing, and they are documented as carefully as the ones that shipped.
+6. **Negative results are kept** and documented as carefully as the changes that shipped.
 
-## Why
+## Research axes
 
-gbrain gives an agent a memory it controls: Markdown pages, Postgres with pgvector, hybrid search, an MCP server. Its defaults are tuned on the author's own brain and on public benchmarks. On a different corpus (mostly chat threads, meeting notes and project pages, mostly in French) the right page was in the top 5 for only 68% of real questions. The fork measures before it changes anything (see Method).
+The work is organised in six axes. In each one, several published methods are compared with each other and with what gbrain does today, on the same benches, with a protocol written before measuring.
 
-One rule shapes every change: **gbrain indexes, Claude reasons**. gbrain calls no chat model; anything that writes or judges goes through Claude, outside gbrain.
+| Axis | Question | Compared so far | Next candidates |
+|---|---|---|---|
+| **Temporality and truth** | What is true now, when pages from different periods disagree? | Page-level supersession: detection works (8 reliable pairs out of 799), annotate shipped, demotion neutral to harmful | Filling dated facts; bitemporal graph (Zep / Graphiti) |
+| **Indexing** | In what form should a chunk be indexed so a question finds it? | doc2query **shipped** (+0.20 MRR on the target); per-chunk context (Anthropic) dropped; rewritten titles, French full text | Learned sparse retrieval (SPLADE) |
+| **Chunking** | Which unit to index, which unit to return? | — | `return_unit` (search small, return big); atomic propositions; late chunking |
+| **Routing** | Should every question be handled the same way? | Thematic router (GraphRAG / RAPTOR style) dropped; strategy routing (Adaptive-RAG) no headroom | Relational planner measured in isolation |
+| **Ranking** | How to order candidates, how many times to search? | Reranker fused with the hybrid order **shipped**; query expansion, autocut, iterative search dropped | Voyage reranker against the current one; usage feedback |
+| **Session context** | What should the agent know before it searches? | — | On-demand project dossier with prompt caching; overnight preparation |
+
+Each axis, its methods, their sources and the protocols are detailed in §5 of the [write-up](docs/fork/research/gbrain-2.0-paper.md).
 
 ## How it works
 
@@ -67,10 +80,9 @@ flowchart LR
 
 **Choices and their trade-offs**
 
-- **Fuse the reranker with the hybrid order rather than replace it.** The reranker and hybrid search each missed 7 different questions; RRF keeps both signals. Cost: one more ranking step, no extra call.
+- **Fuse the reranker with the hybrid order rather than replace it.** Each missed 7 different questions; RRF keeps both. Cost: one more ranking step.
 - **doc2query in its own table (`chunk_index_text`) rather than in the page body.** Pages stay untouched and the feature is byte-identical when off. Cost: a schema migration (v265) to carry across upstream upgrades.
-- **Report stale pages rather than demote them.** A superseded page is still the right answer for questions about its history; demoting it hurt those questions. Cost: the agent has to read the annotation.
-- **Turn slug-prefix boosts off rather than retune them.** The ×1.5 boost on `originals/` was set for another brain and crowded out factual pages here.
+- **Report stale pages rather than demote them.** A superseded page stays the right answer about its own history. Cost: the agent must read the annotation.
 
 ## Example
 
@@ -92,7 +104,7 @@ When did Atlas move to the new provider?
 
 ## Results
 
-Measured on one knowledge base of about 1,160 pages and 3,780 chunks (chat threads, meeting notes, project, process and person pages), mostly in French. Tuned on bench v2, validated on holdout A, holdout B opened once; no question is shared. Recall@5 / MRR / nDCG@5 with `gbrain eval --qrels`.
+One knowledge base of about 1,160 pages and 3,780 chunks (chat threads, meeting notes, project, process and person pages), mostly in French. Recall@5 / MRR / nDCG@5 with `gbrain eval --qrels`.
 
 | Bench | Upstream defaults | This fork |
 |---|---|---|
@@ -101,7 +113,7 @@ Measured on one knowledge base of about 1,160 pages and 3,780 chunks (chat threa
 | Holdout B, 41 questions, opened once | — | **0.92 / 0.89 / 0.88** |
 | Answer in a middle chunk of a long page, 40 questions | 0.57 / 0.51 / 0.53 | **0.78 / 0.70 / 0.72** (doc2query) |
 
-Measured and dropped: query expansion (no gain, +5 s per search), per-chunk context (+0.02 MRR, within noise), autocut (no effect), demoting superseded pages (neutral to harmful), a thematic router (intervals include 0), iterative-search instructions and strategy routing (no headroom). Details, confidence intervals and the end-to-end agentic bench: [research summary](docs/fork/research/README.md), [full write-up](docs/fork/research/gbrain-2.0-paper.md).
+Details, confidence intervals and the end-to-end agentic bench: [research summary](docs/fork/research/README.md), [full write-up](docs/fork/research/gbrain-2.0-paper.md).
 
 ## Run it
 
@@ -115,7 +127,7 @@ gbrain config set search.source_boosts none   # the largest single gain
 gbrain config set search.chunk_index_text d2q # doc2query, after generating questions
 ```
 
-Reranker fusion and the rubric are environment settings: `GBRAIN_RERANK_FUSION=rrf`, `GBRAIN_RERANK_RUBRIC=v2`, and `GBRAIN_SUPERSEDE=annotate` for supersession. The full live configuration is in appendix A of the write-up.
+Then `GBRAIN_RERANK_FUSION=rrf`, `GBRAIN_RERANK_RUBRIC=v2` and `GBRAIN_SUPERSEDE=annotate` in the environment; full configuration in appendix A of the write-up.
 
 ## Project structure
 
@@ -129,11 +141,11 @@ Reranker fusion and the rubric are environment settings: `GBRAIN_RERANK_FUSION=r
 | `ops/fork-sync/` | Guard and script that keep this public fork apart from the private overlay |
 | `docs/fork/` | Research write-up and fork workflow |
 
-Everything else is upstream gbrain; its documentation lives in `docs/` and in [upstream's README](https://github.com/garrytan/gbrain#readme).
+Everything else is upstream gbrain, documented in `docs/` and [upstream's README](https://github.com/garrytan/gbrain#readme).
 
 ## Data and privacy
 
-The benches reference pages of a private brain, so the question sets (`qrels*.json`), results, generated questions and page content are never in this repository. They live in a private overlay that shares this history ([fork workflow](docs/fork/WORKFLOW.md)); `ops/fork-sync/guard-pre-push.sh` refuses to push private paths here. On each search, the question goes to the embeddings provider and the question plus about 25 candidate passages go to the reranker provider.
+Question sets (`qrels*.json`), results, generated questions and page content are never in this repository: they stay in a private overlay ([fork workflow](docs/fork/WORKFLOW.md)), and `ops/fork-sync/guard-pre-push.sh` refuses to push them here. On each search, the question goes to the embeddings provider, and the question plus about 25 candidate passages go to the reranker provider.
 
 ## Limitations and next
 
@@ -142,7 +154,7 @@ The benches reference pages of a private brain, so the question sets (`qrels*.js
 - Labels miss some relevant pages; the agentic judge (Claude Haiku) varies by about ±0.15 between identical runs.
 - The reranker can move a page by one place between calls.
 - Local patches must be carried at each upstream upgrade until they are merged upstream.
-- Next: compare a Voyage reranker against the current one, test `return_unit`, and measure a cached project dossier for long sessions.
+- Next: the open candidates of each axis above.
 
 ## Development
 
@@ -153,7 +165,7 @@ bun run typecheck
 bun test --timeout=60000 test/chunk-index-text.test.ts
 ```
 
-Every change goes through a pull request with a Conventional Commits title, a security review and a code review, and is squash-merged once CI is green (`test`, `gitleaks`, `semantic-title`). Upstream's own workflows need its runners and are disabled here. Pulling upstream changes and the private overlay are described in [docs/fork/WORKFLOW.md](docs/fork/WORKFLOW.md).
+Every change is a pull request with a Conventional Commits title, a security review and a code review, squash-merged once `test`, `gitleaks` and `semantic-title` are green. Upstream sync and the private overlay: [docs/fork/WORKFLOW.md](docs/fork/WORKFLOW.md).
 
 ## License and credits
 
