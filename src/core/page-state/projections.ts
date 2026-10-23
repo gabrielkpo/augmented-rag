@@ -22,8 +22,10 @@ import { pageReadFilter } from '../search/read-policy-sql.ts';
 import type { PageReadScope } from '../types.ts';
 import { projectionClassSql, sealableImageSql } from './projection-class.ts';
 import { advanceProjectionCursor, ineligibleKey, rememberIneligible, residentWindowCtes, type ProjectionScanCursor } from './projection-window.ts';
-import { acceptedEmbeddingInputHashes, embeddingInputHash, plainEmbeddingTier, synopsisBodyHash,
+import { acceptedEmbeddingInputHashes, embeddingInputHash, hasIndexText, plainEmbeddingTier, synopsisBodyHash,
   type EmbeddingInputContext, type EmbeddingTier } from '../embedding-input-hash.ts';
+import { CHUNK_INDEX_TEXT_CONFIG_KEY, loadPageChunkIndexTexts, parseChunkIndexTextSetting,
+  type ChunkIndexTextKind, type ChunkIndexTexts } from '../chunk-index-text.ts';
 
 /**
  * Complete the searchable snapshot only after its sanitized chunks are installed.
@@ -67,6 +69,8 @@ export interface ProjectionSnapshot {
   pageKind: PageKind;
   /** #5575 ENG-1: held, purged and below-page-tier fence rows, read with the snapshot. */
   fenceOverlay?: FenceChunkOverlay;
+  /** The page's chunk index texts read with the snapshot (empty with the setting off); every embed of it wraps with these. */
+  indexTexts?: ChunkIndexTexts;
 }
 
 export type ProjectionConflictField = 'text_projection_revision' | 'chunk_digest' | 'indexing_context';
@@ -96,24 +100,32 @@ export async function retryProjectionConflict<T>(attempt: () => Promise<T>, rand
 }
 
 /** The vector column and model a write targets; `model` is what a stored chunk's label and provenance are compared to. */
-export async function embeddingWriteTarget(engine: Pick<BrainEngine, 'executeRaw'>): Promise<{ config: Array<{ key: string; value: string }>; model: string | null; column: ResolvedColumn; provenanceModel: string | null }> {
+export async function embeddingWriteTarget(engine: Pick<BrainEngine, 'executeRaw'>): Promise<{ config: Array<{ key: string; value: string }>; model: string | null; column: ResolvedColumn; provenanceModel: string | null; indexText: ChunkIndexTextKind | null }> {
   // A missing config table reads as defaults, as upsertChunks' own resolution does.
+  // The chunk index text setting is part of the indexing context: toggling it supersedes in-flight projections.
   const config = await engine.executeRaw<{ key: string; value: string }>(
-    "SELECT key,value FROM config WHERE key IN ('search_embedding_column','embedding_columns','embedding_model','embedding_dimensions','contextual_retrieval.mode') ORDER BY key") ?? [];
+    `SELECT key,value FROM config WHERE key IN ('search_embedding_column','embedding_columns','embedding_model','embedding_dimensions','contextual_retrieval.mode','${CHUNK_INDEX_TEXT_CONFIG_KEY}') ORDER BY key`) ?? [];
   let model = config.find(row => row.key === 'embedding_model')?.value ?? null;
   try { model = getEmbeddingModel(); } catch { /* Unconfigured gateway: retain the brain's recorded model. */ }
   const column = resolveWriteColumnFromConfigRows({
     searchEmbeddingColumn: config.find(row => row.key === 'search_embedding_column')?.value ?? null,
     embeddingColumnsJson: config.find(row => row.key === 'embedding_columns')?.value ?? null,
   });
-  return { config, model, column, provenanceModel: column.name === 'embedding' ? model : column.embeddingModel };
+  return { config, model, column, provenanceModel: column.name === 'embedding' ? model : column.embeddingModel,
+    indexText: parseChunkIndexTextSetting(config.find(row => row.key === CHUNK_INDEX_TEXT_CONFIG_KEY)?.value) };
 }
 
-/** Provenance inputs for one page's chunk set under a write target. */
+/** Provenance inputs for one page's chunk set under a write target, with the page's chunk index texts when the setting is on. */
 export function embeddingInputContext(target: { column: ResolvedColumn; provenanceModel: string | null }, title: string,
-  corpusGeneration: string | null, chunks: ReadonlyArray<{ chunk_text: string; chunk_source?: string | null }>): EmbeddingInputContext {
+  corpusGeneration: string | null, chunks: ReadonlyArray<{ chunk_text: string; chunk_source?: string | null }>,
+  indexTexts?: ChunkIndexTexts): EmbeddingInputContext {
   return { column: target.column.name, model: target.provenanceModel, dimensions: target.column.dimensions, title, corpusGeneration,
-    bodyHash: synopsisBodyHash(chunks) };
+    bodyHash: synopsisBodyHash(chunks), ...(indexTexts?.size ? { indexTexts } : {}) };
+}
+
+/** A page's chunk index texts under a write target already read (no query with the setting off). */
+export function targetIndexTexts(engine: BrainEngine, target: { indexText: ChunkIndexTextKind | null }, sourceId: string, slug: string): Promise<ChunkIndexTexts> {
+  return loadPageChunkIndexTexts(engine, sourceId, slug, target.indexText);
 }
 
 /**
@@ -122,18 +134,19 @@ export function embeddingInputContext(target: { column: ResolvedColumn; provenan
  * (undefined when nothing was freshly embedded). Reused vectors stay unrecorded.
  */
 export async function stampEmbeddingInputs(engine: Pick<BrainEngine, 'executeRaw'>, chunks: ChunkInput[], fresh: ReadonlySet<number> | null,
-  page: { title: string; tier: EmbeddingTier; corpusGeneration: string | null }): Promise<ResolvedColumn | undefined> {
+  page: { title: string; tier: EmbeddingTier; corpusGeneration: string | null; indexTexts?: ChunkIndexTexts }): Promise<ResolvedColumn | undefined> {
   if (!chunks.some((chunk, i) => chunk.embedding && (!fresh || fresh.has(i)))) return undefined;
   const target = await embeddingWriteTarget(engine);
-  const provenance = embeddingInputContext(target, page.title, page.corpusGeneration, chunks);
+  // `indexTexts` are the texts the fresh vectors were built with, never re-read here.
+  const provenance = embeddingInputContext(target, page.title, page.corpusGeneration, chunks, page.indexTexts);
   chunks.forEach((chunk, i) => {
     if (chunk.embedding && (!fresh || fresh.has(i))) chunk.embedding_input_hash = embeddingInputHash(provenance, page.tier, chunk);
   });
   return target.column;
 }
 
-async function indexingContext(engine: BrainEngine, snapshot: PageSnapshot, maxChunkTokensOverride?: number): Promise<{ key: string; model: string | null; maxChunkTokens: number; column: ResolvedColumn; pageKind: PageKind; provenanceModel: string | null; corpusGeneration: string | null }> {
-  const { config, model, column, provenanceModel } = await embeddingWriteTarget(engine);
+async function indexingContext(engine: BrainEngine, snapshot: PageSnapshot, maxChunkTokensOverride?: number): Promise<{ key: string; model: string | null; maxChunkTokens: number; column: ResolvedColumn; pageKind: PageKind; provenanceModel: string | null; corpusGeneration: string | null; indexText: ChunkIndexTextKind | null }> {
+  const { config, model, column, provenanceModel, indexText } = await embeddingWriteTarget(engine);
   const maxChunkTokens = maxChunkTokensOverride ?? resolveMaxChunkTokens();
   const [projection] = await engine.executeRaw<{ chunker_version: number | null; corpus_generation: string | null }>(
     'SELECT chunker_version,corpus_generation FROM pages WHERE id=$1', [snapshot.page.id]);
@@ -143,7 +156,7 @@ async function indexingContext(engine: BrainEngine, snapshot: PageSnapshot, maxC
     maxChunkTokens, storedChunkerVersion: projection?.chunker_version ?? null, corpusGeneration: projection?.corpus_generation ?? null,
     chunkerVersion: MARKDOWN_CHUNKER_VERSION, codeChunkerVersion: CHUNKER_VERSION, pageKind: kind.page_kind,
     ftsLanguage: getFtsLanguage() }), model, maxChunkTokens, column, pageKind: kind.page_kind, provenanceModel,
-    corpusGeneration: projection?.corpus_generation ?? null };
+    corpusGeneration: projection?.corpus_generation ?? null, indexText };
 }
 
 /**
@@ -166,9 +179,10 @@ async function readGuardedProjectionSnapshot(tx: BrainEngine, slug: string, sour
   if (!snapshot || isSegmentedPage(snapshot.page) || (!opts.allowUnsealed && snapshot.page.text_projection_revision !== snapshot.revision)) return null;
   const context = await indexingContext(tx, snapshot, opts.maxChunkTokens);
   const fenceOverlay = context.pageKind === 'markdown' ? await loadFenceChunkOverlay(tx, { sourceId, slug, compiled_truth: snapshot.page.compiled_truth, timeline: snapshot.page.timeline }) : undefined;
+  const indexTexts = await targetIndexTexts(tx, context, sourceId, slug);
   return { snapshot, chunks: await tx.getChunks(slug, { sourceId, includeUnsealed: true }), indexingContext: context.key,
     embeddingModel: context.model, embeddingColumn: context.column, maxChunkTokens: context.maxChunkTokens, maxChunkTokensOverride: opts.maxChunkTokens, pageKind: context.pageKind,
-    ...(fenceOverlay ? { fenceOverlay } : {}) };
+    ...(fenceOverlay ? { fenceOverlay } : {}), ...(indexTexts.size ? { indexTexts } : {}) };
 }
 
 /** No provider work under the guard. Delayed derived results lose to newer content. */
@@ -204,14 +218,15 @@ export async function installPageProjection(engine: BrainEngine, prepared: Proje
       // On a contextual page it is
       // nulled once and stamped by its re-embed.
       const mode = current!.page.contextual_retrieval_mode;
-      const provenance = embeddingInputContext(context, current!.page.title, context.corpusGeneration, chunks);
+      const provenance = embeddingInputContext(context, current!.page.title, context.corpusGeneration, chunks,
+        await targetIndexTexts(tx, context, sourceId, slug));
       const col = quoteIdentifier(context.column.name);
       const recorded = new Map((await tx.executeRaw<{ id: number; embedding_input_hash: string | null; movable: boolean }>(
         `SELECT id,embedding_input_hash,${movableChunkSql(col)} AND model IS NOT DISTINCT FROM $2 AS movable FROM content_chunks WHERE page_id=$1`,
         [snapshot.page.id, context.provenanceModel])).map(row => [Number(row.id), row]));
       const currentInput = (chunk: Chunk) => {
         const hash = recorded.get(Number(chunk.id))?.embedding_input_hash ?? null;
-        return hash === null ? mode == null : acceptedEmbeddingInputHashes(provenance, mode, chunk).includes(hash);
+        return hash === null ? mode == null && !hasIndexText(provenance, chunk) : acceptedEmbeddingInputHashes(provenance, mode, chunk).includes(hash);
       };
       // A4: a chunk unchanged at its index stays; one the new projection holds at
       // another index stays too when its vector is current, and upsertChunks moves
@@ -311,8 +326,9 @@ export async function installPageEmbeddings(engine: BrainEngine, prepared: Proje
     const mode = current.page.contextual_retrieval_mode;
     const tier = built?.tier ?? plainEmbeddingTier(mode);
     const generation = built?.corpusGeneration !== undefined ? built.corpusGeneration : context.corpusGeneration;
-    const capturedInput = embeddingInputContext(context, snapshot.page.title, generation, prepared.chunks);
-    const currentInput = embeddingInputContext(context, current.page.title, generation, stored);
+    // The captured texts are the ones the vectors were built with; the current ones are re-read under the guard.
+    const capturedInput = embeddingInputContext(context, snapshot.page.title, generation, prepared.chunks, prepared.indexTexts);
+    const currentInput = embeddingInputContext(context, current.page.title, generation, stored, await targetIndexTexts(tx, context, sourceId, slug));
     const accepted = new Map<string, { ids: number[]; hash: string; chunk: ChunkInput }>();
     let installed = 0;
     let dropped = 0;

@@ -477,7 +477,7 @@ async function embedPage(engine: BrainEngine, config: GBrainConfig, effect: Pers
         await renew();
         signal.throwIfAborted();
         await assertEmbeddingEffectEnabled(engine, config);
-      }, () => (opts.embedding?.embed ?? embedBatch)(wrapChunkTextsForStoredMode(prepared.snapshot.page, pending), { abortSignal: signal, maxRetries: 0 }));
+      }, () => (opts.embedding?.embed ?? embedBatch)(wrapChunkTextsForStoredMode(prepared.snapshot.page, pending, prepared.indexTexts), { abortSignal: signal, maxRetries: 0 }));
       await grant?.settle({ ok: true });
     } catch (error) {
       await grant?.settle({ ok: isEmbeddingZeroNormError(error) }).catch(() => {});

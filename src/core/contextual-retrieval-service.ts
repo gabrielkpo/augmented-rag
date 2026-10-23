@@ -44,11 +44,13 @@ import * as fs from 'node:fs';
 import { embedBatch } from './embedding.ts';
 import { resolveContextualRetrievalMode } from './contextual-retrieval-resolver.ts';
 import {
-  buildContextualPrefix,
+  buildIndexedContextPrefix,
   modeRequiresSynopsis,
   modeRequiresWrapper,
   wrapChunkForEmbedding,
+  wrapChunkWithIndexText,
 } from './embedding-context.ts';
+import { indexTextFor, type ChunkIndexTexts } from './chunk-index-text.ts';
 import {
   DEFAULT_SYNOPSIS_MODEL,
   generatePerChunkSynopsis,
@@ -414,6 +416,7 @@ export async function reembedPageWithContextualRetrieval(
       args,
       synopsisModel,
       synopsisMaxTokens,
+      indexTexts: prepared.indexTexts,
     });
 
     if (phase1.kind === 'success') {
@@ -503,8 +506,10 @@ async function tryBuildPhase1(opts: {
   synopsisModel: string;
   /** #3883: resolved output-token cap (undefined → page-summary default). */
   synopsisMaxTokens?: number;
+  /** The page's chunk index texts (doc2query), read with the projection snapshot; appended in every tier. */
+  indexTexts?: ChunkIndexTexts;
 }): Promise<Phase1Result> {
-  const { attemptMode, page, chunks, args, synopsisModel, synopsisMaxTokens } = opts;
+  const { attemptMode, page, chunks, args, synopsisModel, synopsisMaxTokens, indexTexts } = opts;
 
   // Build the wrapper prefix for THIS page. Title-only tier: one prefix
   // reused across all chunks. per_chunk_synopsis tier: prefix is built
@@ -518,12 +523,7 @@ async function tryBuildPhase1(opts: {
     // the title tier wants slightly more context — but per D2 the
     // balanced default is title-only without summary. Keep it pure for
     // now; the title block alone is what 'balanced' ships.
-    const prefix = buildContextualPrefix(title, null);
-    const wrappedTexts = chunks.map((c) =>
-      modeRequiresWrapper(attemptMode)
-        ? wrapChunkForEmbedding(c.chunk_text, prefix, c.chunk_source)
-        : c.chunk_text,
-    );
+    const wrappedTexts = chunks.map((c) => wrapChunkWithIndexText(c, modeRequiresWrapper(attemptMode) ? title : null, indexTexts));
 
     try {
       const embeddings = await embedBatch(wrappedTexts, { abortSignal: args.abortSignal });
@@ -566,6 +566,7 @@ async function tryBuildPhase1(opts: {
         args,
         synopsisModel,
         synopsisMaxTokens,
+        indexText: indexTextFor(indexTexts, c),
       });
     },
   });
@@ -615,8 +616,10 @@ async function buildWrappedChunkText(opts: {
   synopsisModel: string;
   /** #3883: resolved output-token cap (undefined → page-summary default). */
   synopsisMaxTokens?: number;
+  /** The chunk's index text (doc2query), appended after the synopsis. */
+  indexText?: string | null;
 }): Promise<string> {
-  const { chunk: c, sourceText, title, page, args, synopsisModel, synopsisMaxTokens } = opts;
+  const { chunk: c, sourceText, title, page, args, synopsisModel, synopsisMaxTokens, indexText } = opts;
 
   // Code chunks always bypass the wrapper (D20-T4) — pass through.
   if (c.chunk_source === 'fenced_code') {
@@ -667,7 +670,7 @@ async function buildWrappedChunkText(opts: {
   }
 
   if (synopsisResult.kind === 'success') {
-    const prefix = buildContextualPrefix(title, synopsisResult.synopsis);
+    const prefix = buildIndexedContextPrefix(title, synopsisResult.synopsis, indexText);
     return wrapChunkForEmbedding(c.chunk_text, prefix, c.chunk_source);
   }
 

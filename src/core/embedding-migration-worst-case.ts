@@ -80,7 +80,7 @@ async function eachReprojectedPage(engine: BrainEngine, sizes: ChunkSizes, weigh
       for (const limit of new Set([sizes.current, sizes.target])) {
         const prepared = await readProjectionSnapshot(engine, row.slug, row.source_id, { allowUnsealed: true, maxChunkTokens: limit });
         if (!prepared) continue;
-        try { candidates.push(wrapChunkTextsForStoredMode(prepared.snapshot.page, healAtTarget((await preparePageProjection(prepared)).chunks, sizes).chunks)); }
+        try { candidates.push(wrapChunkTextsForStoredMode(prepared.snapshot.page, healAtTarget((await preparePageProjection(prepared)).chunks, sizes).chunks, prepared.indexTexts)); }
         catch { continue; }
       }
       if (candidates.length) visit(candidates.reduce((a, b) => weigh(b) > weigh(a) ? b : a));

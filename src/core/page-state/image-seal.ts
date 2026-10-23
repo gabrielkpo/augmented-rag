@@ -10,7 +10,8 @@ import { quoteIdentifier } from '../search/embedding-column.ts';
 import { chunkGenerationFilter, chunkGenerationProbe, movableChunkSql } from '../search/safe-chunks.ts';
 import { sealableImageSql } from './projection-class.ts';
 import { jsonRowBatches } from '../batch-rows.ts';
-import { acceptedEmbeddingInputHashes } from '../embedding-input-hash.ts';
+import { acceptedEmbeddingInputHashes, hasIndexText } from '../embedding-input-hash.ts';
+import { loadChunkIndexTexts, pageIndexTexts } from '../chunk-index-text.ts';
 import { embeddingInputContext, embeddingWriteTarget } from './projections.ts';
 import { AGENT_TOOL_LIMIT_MS } from '../agent-output.ts';
 
@@ -96,7 +97,7 @@ export async function sealImageProjections(engine: BrainEngine, opts: { limit?: 
     const sealed = await engine.transaction(async tx => {
       await tx.lockPageKeys(group.map(row => ({ sourceId: row.source_id, slug: row.slug })));
       const pages = await tx.executeRaw<{ id: number; revision: string; title: string; mode: string | null;
-        corpus_generation: string | null }>(`SELECT p.id,p.knowledge_revision::text AS revision,p.title,
+        corpus_generation: string | null; source_id: string; slug: string }>(`SELECT p.id,p.knowledge_revision::text AS revision,p.title,p.source_id,p.slug,
           p.contextual_retrieval_mode AS mode,p.corpus_generation
         FROM jsonb_to_recordset($1::text::jsonb) AS v(source_id text, slug text, revision uuid)
         JOIN sources s ON s.id=v.source_id AND NOT s.archived
@@ -109,11 +110,12 @@ export async function sealImageProjections(engine: BrainEngine, opts: { limit?: 
           ${movableChunkSql(col)} AND model IS NOT DISTINCT FROM $2 AS current
         FROM content_chunks c WHERE c.page_id=ANY($1::int[]) AND c.${col} IS NOT NULL AND ${chunkGenerationProbe('c')}`, [pages.map(page => Number(page.id)), target.provenanceModel]);
       const byId = new Map(pages.map(page => [Number(page.id), page]));
+      const texts = await loadChunkIndexTexts(tx, pages.map(page => ({ sourceId: page.source_id, slug: page.slug })), target.indexText);
       const stale = chunks.filter(chunk => {
         const page = byId.get(Number(chunk.page_id))!;
+        const provenance = embeddingInputContext(target, page.title, page.corpus_generation, [chunk], pageIndexTexts(texts, page.source_id, page.slug));
         if (!chunk.current) return true;
-        if (chunk.embedding_input_hash === null) return page.mode != null;
-        const provenance = embeddingInputContext(target, page.title, page.corpus_generation, [chunk]);
+        if (chunk.embedding_input_hash === null) return page.mode != null || hasIndexText(provenance, chunk);
         return !acceptedEmbeddingInputHashes(provenance, page.mode, chunk).includes(chunk.embedding_input_hash);
       }).map(chunk => Number(chunk.id));
       if (stale.length) {

@@ -67,7 +67,7 @@ for (const kind of testBackends()) {
       const getChunks = spyOn(engine, 'getChunks');
       let reused: number;
       try {
-        reused = await reuseSegmentChunkVectors(engine, { pageId, retiredOccurrences: [20], chunks, title: TITLE, corpusGeneration: null, tier: 'title' });
+        reused = await reuseSegmentChunkVectors(engine, { pageId, sourceId: 'default', slug: SLUG, retiredOccurrences: [20], chunks, title: TITLE, corpusGeneration: null, tier: 'title' });
         const reads = exec.mock.calls.map(([sql]) => String(sql)).filter(sql => /content_chunks/.test(sql));
         expect(reads).toHaveLength(1);
         expect(reads[0]).toContain('occurrence_id = ANY');
@@ -82,7 +82,7 @@ for (const kind of testBackends()) {
     test('no retired occurrences reads nothing', async () => {
       const exec = spyOn(engine, 'executeRaw');
       try {
-        expect(await reuseSegmentChunkVectors(engine, { pageId, retiredOccurrences: [], chunks: [chunk('unchanged tail chunk', 0)], title: TITLE, corpusGeneration: null, tier: 'title' })).toBe(0);
+        expect(await reuseSegmentChunkVectors(engine, { pageId, sourceId: 'default', slug: SLUG, retiredOccurrences: [], chunks: [chunk('unchanged tail chunk', 0)], title: TITLE, corpusGeneration: null, tier: 'title' })).toBe(0);
         expect(exec).not.toHaveBeenCalled();
       } finally { exec.mockRestore(); }
     });

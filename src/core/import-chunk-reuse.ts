@@ -4,7 +4,7 @@
  * publish (inside its publication transaction, under the page guard).
  */
 import type { BrainEngine } from './engine.ts';
-import { embeddingWriteTarget, embeddingInputContext } from './page-state/projections.ts';
+import { embeddingWriteTarget, embeddingInputContext, targetIndexTexts } from './page-state/projections.ts';
 import { canReuseMarkdownVector, planEmbeddingReuse } from './embed-reuse.ts';
 import { modeRequiresSynopsis } from './embedding-context.ts';
 import type { Chunk, ChunkInput, CRMode } from './types.ts';
@@ -29,7 +29,7 @@ export async function reuseStoredChunkVectors(
 ): Promise<Map<number, number | null>> {
   const reused = new Map<number, number | null>();
   const target = await embeddingWriteTarget(exec);
-  const provenance = embeddingInputContext(target, title, corpusGeneration, into);
+  const provenance = embeddingInputContext(target, title, corpusGeneration, into, await targetIndexTexts(exec, target, sourceId, slug));
   const rows = await exec.executeRaw<{ chunk_index: number; embedding_input_hash: string | null; contextual_retrieval_mode: string | null; text_only: boolean; unembedded: boolean }>(
     `SELECT c.chunk_index, c.embedding_input_hash, p.contextual_retrieval_mode,
         c.embedding_image IS NULL AND c.embedding_multimodal IS NULL AND c.embedded_text_hash = md5(c.chunk_text) AS text_only,
@@ -86,11 +86,11 @@ export async function reuseStoredChunkVectors(
  * unchanged chunk inside a rewritten tail keeps its vector and only new text
  * reaches the provider. Returns how many chunks got one.
  */
-export async function reuseSegmentChunkVectors(exec: BrainEngine, { pageId, retiredOccurrences, chunks, title, corpusGeneration, tier }: {
-  pageId: number; retiredOccurrences: readonly number[]; chunks: SegmentChunkInput[]; title: string; corpusGeneration: string | null; tier: 'title' | 'none' }): Promise<number> {
+export async function reuseSegmentChunkVectors(exec: BrainEngine, { pageId, sourceId, slug, retiredOccurrences, chunks, title, corpusGeneration, tier }: {
+  pageId: number; sourceId: string; slug: string; retiredOccurrences: readonly number[]; chunks: SegmentChunkInput[]; title: string; corpusGeneration: string | null; tier: 'title' | 'none' }): Promise<number> {
   if (retiredOccurrences.length === 0 || chunks.length === 0) return 0;
   const target = await embeddingWriteTarget(exec);
-  const provenance = embeddingInputContext(target, title, corpusGeneration, []);
+  const provenance = embeddingInputContext(target, title, corpusGeneration, [], await targetIndexTexts(exec, target, sourceId, slug));
   const col = quoteIdentifier(target.column.name);
   const rows = await exec.executeRaw<{ chunk_text: string; chunk_source: string; embedding: unknown; token_count: number | null; model: string | null;
     embedding_input_hash: string | null; contextual_retrieval_mode: string | null }>(

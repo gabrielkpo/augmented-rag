@@ -14,7 +14,7 @@ import { jsonRowBatches } from '../batch-rows.ts';
 import { wrapChunkTextsForStoredMode } from '../embedding-context.ts';
 import { embeddingInputHash, plainEmbeddingTier } from '../embedding-input-hash.ts';
 import { meterPageBatch, spendGrant } from '../page-embedding-budget.ts';
-import { embeddingInputContext, embeddingWriteTarget } from '../page-state/projections.ts';
+import { embeddingInputContext, embeddingWriteTarget, targetIndexTexts } from '../page-state/projections.ts';
 import { quoteIdentifier, vectorCastSuffix } from '../search/embedding-column.ts';
 import { chunkGenerationFilter, currentTextProjectionFilter } from '../search/safe-chunks.ts';
 import { buildSegmentedProjection } from './projection.ts';
@@ -118,12 +118,13 @@ export async function embedSegmentedRows(engine: BrainEngine, page: SegmentedEmb
   if (!metered) return null;
   const chunks = metered.chunks;
   const target = await embeddingWriteTarget(engine);
-  const vectors = await spendGrant(metered.grant, () => opts.embedFn(wrapChunkTextsForStoredMode(page, chunks), { abortSignal: opts.signal }));
+  const indexTexts = await targetIndexTexts(engine, target, page.source_id, page.slug);
+  const vectors = await spendGrant(metered.grant, () => opts.embedFn(wrapChunkTextsForStoredMode(page, chunks, indexTexts), { abortSignal: opts.signal }));
   if (vectors.length !== chunks.length || vectors.some(v => !v?.length || !v.every(Number.isFinite))) {
     throw new Error('Embedding provider returned an incomplete or invalid batch');
   }
   const tier = plainEmbeddingTier(page.contextual_retrieval_mode);
-  const provenance = embeddingInputContext(target, page.title, null, []);
+  const provenance = embeddingInputContext(target, page.title, null, [], indexTexts);
   const updates = chunks.map((chunk, i) => ({ chunk_index: chunk.chunk_index, chunk_text: chunk.chunk_text,
     embedding: `[${Array.from(vectors[i]!).join(',')}]`, hash: embeddingInputHash(provenance, tier, chunk) }));
   const col = quoteIdentifier(target.column.name);

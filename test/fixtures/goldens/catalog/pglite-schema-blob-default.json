@@ -23,6 +23,9 @@
       "chronicle_page_state.chronicle_page_state_source_id_fkey": "f FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE CASCADE",
       "chronicle_page_state.chronicle_page_state_state_check": "c CHECK ((state = ANY (ARRAY['pending'::text, 'skipped'::text, 'extracted'::text, 'failed'::text])))",
       "chronicle_page_state.chronicle_page_state_trigger_check": "c CHECK ((trigger = ANY (ARRAY['auto'::text, 'backfill'::text])))",
+      "chunk_index_text.chunk_index_text_kind_check": "c CHECK ((kind = 'd2q'::text))",
+      "chunk_index_text.chunk_index_text_pkey": "p PRIMARY KEY (source_id, slug, chunk_hash, kind)",
+      "chunk_index_text.chunk_index_text_source_id_fkey": "f FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE CASCADE",
       "config.config_pkey": "p PRIMARY KEY (key)",
       "content_chunks.content_chunks_page_id_fkey": "f FOREIGN KEY (page_id) REFERENCES pages(id) ON DELETE CASCADE",
       "content_chunks.content_chunks_pkey": "p PRIMARY KEY (id)",
@@ -373,6 +376,7 @@
       "enforce_minion_queue_protocol()": "RETURNS trigger kind=f lang=plpgsql volatility=v secdef=false config=[search_path=pg_catalog, public] body_sha256=be82640d1979fc81dc812efb78bb3596ef536f656d20750e5e4aa19016bf4784",
       "gbrain_advance_page_revision()": "RETURNS trigger kind=f lang=plpgsql volatility=v secdef=false config=[search_path=pg_catalog, public] body_sha256=2a431195dc4c4150e3428251d0dec0a685cdc2992525c1b4b54dff103d5d99c9",
       "gbrain_advance_tag_revision()": "RETURNS trigger kind=f lang=plpgsql volatility=v secdef=false config=[search_path=pg_catalog, public] body_sha256=7807b26b4933148aa63c67fca824a60d3492396728205d04e16c48c81174cbd5",
+      "gbrain_chunk_index_text(p_page_id integer, p_chunk_source text, p_chunk_text text)": "RETURNS text kind=f lang=plpgsql volatility=s secdef=false config=[search_path=pg_catalog, public] body_sha256=9b32c01934f11cf5262443e4700ea629e54b4058aeefe2bb42b746cad2f632ac",
       "gbrain_forget_page_retrievals()": "RETURNS trigger kind=f lang=plpgsql volatility=v secdef=false config=[search_path=pg_catalog, public] body_sha256=0f053c08f9d5a4512d10406f7b20b9c60ec43d9bbea48b28b7e4cf7187ee191b",
       "gbrain_fts_input(t text)": "RETURNS text kind=f lang=sql volatility=i secdef=false config=[search_path=pg_catalog] body_sha256=c73d0dbc333c6dccc9714a6b8d1b7785f48170556b9024002ddca1c80b25d87d",
       "gbrain_guard_effect_protocol()": "RETURNS trigger kind=f lang=plpgsql volatility=v secdef=false config=[search_path=pg_catalog, public] body_sha256=e8b5589dafd4a355106104daffdf57c7776d34fe18c5b5f5336a27de188688a1",
@@ -415,6 +419,9 @@
         "<current_role> -> <current_role> WITH GRANT OPTION: DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
       ],
       "chronicle_page_state": [
+        "<current_role> -> <current_role> WITH GRANT OPTION: DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+      ],
+      "chunk_index_text": [
         "<current_role> -> <current_role> WITH GRANT OPTION: DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
       ],
       "config": [
@@ -780,6 +787,7 @@
       "chronicle_page_state_page_idx": "CREATE INDEX chronicle_page_state_page_idx ON public.chronicle_page_state USING btree (page_id)",
       "chronicle_page_state_pkey": "CREATE UNIQUE INDEX chronicle_page_state_pkey ON public.chronicle_page_state USING btree (source_id, page_id, content_hash, extractor_version)",
       "chronicle_page_state_work_idx": "CREATE INDEX chronicle_page_state_work_idx ON public.chronicle_page_state USING btree (source_id, state, next_attempt_at)",
+      "chunk_index_text_pkey": "CREATE UNIQUE INDEX chunk_index_text_pkey ON public.chunk_index_text USING btree (source_id, slug, chunk_hash, kind)",
       "config_pkey": "CREATE UNIQUE INDEX config_pkey ON public.config USING btree (key)",
       "content_chunks_pkey": "CREATE UNIQUE INDEX content_chunks_pkey ON public.content_chunks USING btree (id)",
       "content_chunks_stale_idx": "CREATE INDEX content_chunks_stale_idx ON public.content_chunks USING btree (page_id, chunk_index) WHERE (embedding IS NULL)",
@@ -1296,6 +1304,19 @@
           "24 pricing_policy text/text NULL",
           "25 campaign_max_usd numeric/numeric NULL",
           "26 cost_attempts ARRAY/_int4 NOT NULL DEFAULT '{}'::integer[]"
+        ],
+        "flags": "relkind=r rls=false force_rls=false"
+      },
+      "chunk_index_text": {
+        "columns": [
+          "1 source_id text/text NOT NULL",
+          "2 slug text/text NOT NULL",
+          "3 chunk_hash text/text NOT NULL",
+          "4 kind text/text NOT NULL",
+          "5 text text/text NOT NULL",
+          "6 model text/text NOT NULL",
+          "7 prompt_version text/text NOT NULL",
+          "8 created_at timestamp with time zone/timestamptz NOT NULL DEFAULT now()"
         ],
         "flags": "relkind=r rls=false force_rls=false"
       },

@@ -6,6 +6,8 @@ import type { ChunkWindowRequest, ChunkWindowOpts, ChunkWindowPage } from './sea
 import type { KeywordPageWindow } from './search/keyword-statement.ts';
 import type { EmbeddingState, EmbeddingStateCounts, EmbeddingStateRow } from './embedding-state.ts';
 import type { DerivedLinkBatchItem, DerivedLinkOrigin, DerivedLinkReplacementOptions } from './derived-links.ts';
+import type { ChunkIndexTextKind, ChunkIndexTextRow } from './chunk-index-text.ts';
+import type { ChunkIndexTextInput, ChunkIndexTextPendingRow } from './engine-sql/chunk-index-text.ts';
 export type { PageKey, PageSnapshot, PageSnapshotOptions, PageWriteOptions, PageMutationPrecondition, PageWithdrawal } from './page-state/types.ts';
 import type {
   Page, PageInput, PageFilters, GetPageOpts, PageReadScope, PageReadPolicy,
@@ -1227,6 +1229,14 @@ export interface BrainEngine {
    * `getChunksWithEmbeddings`, which honors neither scope precedence nor RLS.
    */
   getChunks(slug: string, opts?: PageReadScope & { includeEmbedding?: boolean; includeUnsealed?: boolean }): Promise<Chunk[]>;
+  /** doc2query chunk index texts of the given pages (engine-sql/chunk-index-text.ts; src/core/chunk-index-text.ts). */
+  getChunkIndexTexts(refs: ReadonlyArray<{ sourceId: string; slug: string }>, opts: { kind: ChunkIndexTextKind }): Promise<ChunkIndexTextRow[]>;
+  /** Upserts chunk index texts on (source_id, slug, chunk_hash, kind); a derived-data write, never a page write. */
+  putChunkIndexTexts(rows: ReadonlyArray<ChunkIndexTextInput>): Promise<number>;
+  /** Pages of at least `minChunks` chunks with an eligible chunk lacking a text for its current hash, every chunk of each. */
+  listChunkIndexTextPending(opts: { kind: ChunkIndexTextKind; minChunks: number; sourceId?: string; limitPages?: number }): Promise<ChunkIndexTextPendingRow[]>;
+  /** Deletes a kind's texts whose hash no live chunk holds (`all`: every one). */
+  pruneChunkIndexTexts(opts: { kind: ChunkIndexTextKind; all?: boolean }): Promise<number>;
   /** get_chunks paging: the chunks with chunk_index in [fromIndex, fromIndex + limit) under getChunks' predicate, the count it admits and the highest chunk_index (engine-sql/chunks.ts). */
   getChunkPage(slug: string, opts: PageReadScope & { fromIndex: number; limit: number }): Promise<{ chunks: Chunk[]; total_chunks: number; max_chunk_index: number | null }>;
   /** Evidence delivery: one batched, re-authorized chunk-window read keyed by page_id (engine-sql/chunks.ts). */

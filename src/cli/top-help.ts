@@ -72,6 +72,7 @@ FILES
 
 EMBEDDINGS
   embed [<slug>|--all|--stale]       Generate/refresh embeddings
+  chunk-text <pending|import|refresh|prune|status>  doc2query chunk index texts (host only)
 
 LINKS
   link <from> <to>                   Create typed link (alias: link-add)

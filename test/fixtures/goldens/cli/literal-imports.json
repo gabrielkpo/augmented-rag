@@ -28,6 +28,9 @@
       "calibration": [
         "./commands/calibration.ts"
       ],
+      "chunk-text": [
+        "./commands/chunk-text.ts"
+      ],
       "code-callees": [
         "./commands/code-callees.ts"
       ],

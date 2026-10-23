@@ -1216,7 +1216,7 @@ async function embedPage(
   let firstError: unknown;
   try {
     ({ embeddings, failed, firstError } = await spendGrant(metered.grant, () => embedPageTexts(
-      wrapChunkTextsForStoredMode(prepared.snapshot.page, toEmbed),
+      wrapChunkTextsForStoredMode(prepared.snapshot.page, toEmbed, prepared.indexTexts),
       signal ? { abortSignal: signal } : {},
     )));
   } catch (e: unknown) {
@@ -1418,7 +1418,7 @@ async function embedAll(
       // not the whole page's siblings. The wrapped texts feed the fan-out
       // too, so an isolation retry never strips the contextual prefixes.
       const { embeddings, failed, firstError } = await spendGrant(metered.grant, () => embedPageTexts(
-        wrapChunkTextsForStoredMode(page, toEmbed),
+        wrapChunkTextsForStoredMode(page, toEmbed, prepared.indexTexts),
         signal ? { abortSignal: signal } : {},
       ));
       // Build a map of new embeddings by chunk_index
@@ -2125,7 +2125,7 @@ async function embedAllStale(
           if (!metered) return;
           if (metered.grant) stale = metered.chunks.map(c => ({ ...(selected.get(c.chunk_index) ?? { source_id: keySourceId, slug, page_id: pageRow.id }), ...c }));
           const { embeddings, failed, firstError } = await spendGrant(metered.grant, () => embedPageTexts(
-            wrapChunkTextsForStoredMode(pageRow, stale), { abortSignal: effectiveSignal }));
+            wrapChunkTextsForStoredMode(pageRow, stale, prepared.indexTexts), { abortSignal: effectiveSignal }));
           const staleIdxToEmbedding = new Map<number, Float32Array>();
           for (let j = 0; j < stale.length; j++) {
             const emb = embeddings[j];

@@ -1,6 +1,6 @@
 {
   "golden": {
-    "count": 259,
+    "count": 260,
     "gaps": [
       17,
       18,
@@ -72,7 +72,7 @@
       "tableRows": "906d2413b13d76a06d5910885e47ed5c544be4ff3a2266e83146715721b24270",
       "verifyProjectionStatistics": "0d231b04ecfbc5a4109d6fca9567bf4e8c9e9db6c3fbbb35212e026579ed6f67"
     },
-    "latest": 264,
+    "latest": 265,
     "records": [
       {
         "handler": {
@@ -4201,6 +4201,26 @@
         "transaction": "absent",
         "verify": "absent",
         "version": 264
+      },
+      {
+        "handler": {
+          "form": "arrow",
+          "helpers": [
+            "chunkSearchVectorTriggerFnSql",
+            "getFtsLanguage"
+          ],
+          "sha256": "a2e583224a38adf366593a9aeb790eb6cfdb78e763f1bbb92172e681e338a2dd"
+        },
+        "idempotent": true,
+        "name": "chunk_index_text",
+        "sql": {
+          "length": 1273,
+          "sha256": "28b3dc505a9b49a6a8e9b5c7a54a51b953af76f643d77c61856af3c65184aa61"
+        },
+        "sqlFor": "absent",
+        "transaction": "absent",
+        "verify": "absent",
+        "version": 265
       }
     ],
     "versions": [
@@ -4462,7 +4482,8 @@
       261,
       262,
       263,
-      264
+      264,
+      265
     ]
   },
   "normalizer": "migrations-record-v1"

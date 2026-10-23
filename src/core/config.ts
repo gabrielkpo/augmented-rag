@@ -1389,6 +1389,7 @@ export const KNOWN_CONFIG_KEYS: readonly string[] = [
   'search.cjk_keyword_deadline_ms',
   'search.keyword_statement_timeout_ms',
   'search.keyword_timeout_negative_cache_seconds', // #6495: seconds, default 600, 0 = off (postgres-engine/keyword-timeout-cache.ts)
+  'search.chunk_index_text', // doc2query: 'd2q' adds stored chunk index texts to embeddings and keyword vectors (chunk-index-text.ts); unset = off
   'search.adaptive_return',
   'search.adaptive_return_entity_max',
   'search.adaptive_return_other_max',

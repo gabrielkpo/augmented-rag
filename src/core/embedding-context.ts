@@ -24,6 +24,7 @@
 
 import { CJK_SENTENCE_DELIMITERS } from './cjk.ts';
 import type { CRMode } from './types.ts';
+import { indexTextFor, sanitizeIndexText, type ChunkIndexTexts } from './chunk-index-text.ts';
 
 /**
  * Hard cap on the title-only block per chunk. Generous because high-signal
@@ -57,6 +58,24 @@ export function buildContextualPrefix(
     return `<context>\n${safeSynopsis}\n</context>\n`;
   }
   return `<context>${safeTitle}\n${safeSynopsis}\n</context>\n`;
+}
+
+/**
+ * The contextual prefix with a chunk index text (doc2query, chunk-index-text.ts)
+ * appended inside the block: `<context>{title}\n{synopsis}\n{text}\n</context>\n`.
+ * Title and synopsis keep their caps; the index text is not cut to the 300-
+ * character synopsis cap (questions run ~334 characters at the median). An
+ * empty index text returns `buildContextualPrefix(title, synopsis)` unchanged.
+ */
+export function buildIndexedContextPrefix(
+  title: string | null | undefined,
+  synopsis: string | null | undefined,
+  indexText: string | null | undefined,
+): string | null {
+  const text = sanitizeIndexText(indexText ?? '');
+  if (!text) return buildContextualPrefix(title, synopsis);
+  const body = [sanitizeSynopsis(synopsis ?? ''), text].filter(Boolean).join('\n');
+  return `<context>${sanitizeTitle(title ?? '')}\n${body}\n</context>\n`;
 }
 
 /**
@@ -209,11 +228,30 @@ export function wrapChunkTextsForStoredMode(
     | null
     | undefined,
   chunks: ReadonlyArray<{ chunk_text: string; chunk_source?: string | null }>,
+  indexTexts?: ChunkIndexTexts | null,
 ): string[] {
   const mode = page?.contextual_retrieval_mode;
-  if (mode == null || !modeRequiresWrapper(mode)) {
-    return chunks.map((c) => c.chunk_text);
+  const wraps = mode != null && modeRequiresWrapper(mode);
+  if (!indexTexts?.size) {
+    if (!wraps) return chunks.map((c) => c.chunk_text);
+    const prefix = buildContextualPrefix(page?.title ?? '', null);
+    return chunks.map((c) => wrapChunkForEmbedding(c.chunk_text, prefix, c.chunk_source));
   }
-  const prefix = buildContextualPrefix(page?.title ?? '', null);
-  return chunks.map((c) => wrapChunkForEmbedding(c.chunk_text, prefix, c.chunk_source));
+  return chunks.map((c) => wrapChunkWithIndexText(c, wraps ? page?.title ?? '' : null, indexTexts));
+}
+
+/**
+ * One chunk's plain-tier embedding input under `indexTexts`: the title prefix
+ * (`title` null: no title, the `none` tier) plus the chunk's index text when
+ * it has one; fenced code stays raw. Shared by every plain embedding writer
+ * and embedding-input-hash.ts, so the input and its provenance cannot drift.
+ */
+export function wrapChunkWithIndexText(
+  chunk: { chunk_text: string; chunk_source?: string | null },
+  title: string | null,
+  indexTexts: ChunkIndexTexts | null | undefined,
+): string {
+  const text = indexTextFor(indexTexts, chunk);
+  if (text) return buildIndexedContextPrefix(title, null, text) + chunk.chunk_text;
+  return wrapChunkForEmbedding(chunk.chunk_text, title == null ? null : buildContextualPrefix(title, null), chunk.chunk_source);
 }

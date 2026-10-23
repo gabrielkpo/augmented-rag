@@ -355,6 +355,13 @@
         "thinClient": "none",
         "thinClientRoutedSubcommands": []
       },
+      "chunk-text": {
+        "hasSwitchCase": true,
+        "phase": "post-connect",
+        "preConnectRules": [],
+        "thinClient": "refuse",
+        "thinClientRoutedSubcommands": []
+      },
       "claw-test": {
         "hasSwitchCase": false,
         "phase": "pre-connect",

@@ -418,7 +418,7 @@ export async function stageOccurrenceChunks(engine: BrainEngine, input: { pageId
         chunks.push({ ...chunk, occurrence_id: row.occurrenceId });
       }
     }
-    if (chunks.length && input.retiredOccurrences.length) await reuseSegmentChunkVectors(engine, { pageId: input.pageId,
+    if (chunks.length && input.retiredOccurrences.length) await reuseSegmentChunkVectors(engine, { pageId: input.pageId, sourceId: input.sourceId, slug: input.slug,
       retiredOccurrences: input.retiredOccurrences, chunks, title: input.title, corpusGeneration: input.chunking.corpusGeneration, tier: input.chunking.tier });
     segmentChunkWork.batches++;
     segmentChunkWork.chunks += chunks.length;

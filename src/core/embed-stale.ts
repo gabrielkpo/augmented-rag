@@ -345,7 +345,7 @@ export async function embedStalePages(
       if (!metered) continue;
       const stale = metered.chunks;
       const embeddings = await spendGrant(metered.grant, () => embedFn(
-        wrapChunkTextsForStoredMode(pageRow, stale),
+        wrapChunkTextsForStoredMode(pageRow, stale, prepared.indexTexts),
         { abortSignal: opts.signal },
       ));
       const staleIdxToEmbedding = new Map<number, Float32Array>();
@@ -591,7 +591,7 @@ export async function embedStaleForSource(
         if (metered.grant) stale = metered.chunks.map(c => ({ ...(selected.get(c.chunk_index) ?? { source_id: keySourceId, slug, page_id: pageRow.id }), ...c }));
         await opts.assertOwned?.();
         if (stopped()) return;
-        const embeddings = await spendGrant(metered.grant, () => embedFn(wrapChunkTextsForStoredMode(pageRow, stale), { abortSignal: signal }));
+        const embeddings = await spendGrant(metered.grant, () => embedFn(wrapChunkTextsForStoredMode(pageRow, stale, prepared.indexTexts), { abortSignal: signal }));
         if (stopped()) return;
         const dimensions = signature ? splitEmbeddingSignature(signature).dims
           : prepared.embeddingColumn.name === 'embedding' ? (await readContentChunksEmbeddingDim(engine)).dims : prepared.embeddingColumn.dimensions;

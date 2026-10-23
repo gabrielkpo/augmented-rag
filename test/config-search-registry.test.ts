@@ -39,6 +39,7 @@ const DIRECTLY_READ_SINGLETONS = [
   'search.cjk_keyword_deadline_ms',          // search/cjk-keyword-deadline.ts via loadConfigWithEngine
   'search.keyword_statement_timeout_ms',     // postgres-engine/keyword-statement-timeout.ts (engine.getConfig once per connection) + loadConfigWithEngine
   'search.keyword_timeout_negative_cache_seconds', // postgres-engine/keyword-timeout-cache.ts (read on the first keyword timeout)
+  'search.chunk_index_text', // chunk-index-text.ts + page-state/projections.ts embeddingWriteTarget + SQL gbrain_chunk_index_text()
   'search.crag_escalation',                  // ops/search.ts
   'search.alias_fanout_max',                 // search/alias-fanout.ts
   'search.demote_generated',                 // search/provenance-demotion.ts

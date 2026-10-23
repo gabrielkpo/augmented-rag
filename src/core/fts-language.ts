@@ -172,11 +172,16 @@ export function pageSearchVectorSql(title: string, timeline: string, lang: strin
   return `setweight(to_tsvector('${lang}',gbrain_fts_input(COALESCE(${title},''))),'A') || setweight(to_tsvector('${lang}',gbrain_fts_input(left(${timeline}::text,${PAGE_TIMELINE_FTS_MAX_CHARS}))),'C')`;
 }
 
-/** The chunk keyword vector, over a row's own columns (`NEW.` in the trigger, bare in a backfill). */
+/**
+ * The chunk keyword vector, over a row's own columns (`NEW.` in the trigger, bare in a backfill).
+ * The chunk's index text (doc2query, chunk-index-text-schema.ts) joins at weight C; it is NULL,
+ * so an empty vector, unless the `search.chunk_index_text` setting is on and a text exists.
+ */
 export function chunkSearchVectorSql(lang: string, row = ''): string {
   return `setweight(to_tsvector('${lang}', gbrain_fts_input(COALESCE(${row}doc_comment, ''))), 'A') ||
     setweight(to_tsvector('${lang}', gbrain_fts_input(COALESCE(${row}symbol_name_qualified, ''))), 'A') ||
-    setweight(to_tsvector('${lang}', gbrain_fts_input(COALESCE(${row}chunk_text, ''))), 'B')`;
+    setweight(to_tsvector('${lang}', gbrain_fts_input(COALESCE(${row}chunk_text, ''))), 'B') ||
+    setweight(to_tsvector('${lang}', gbrain_fts_input(COALESCE(gbrain_chunk_index_text(${row}page_id, ${row}chunk_source, ${row}chunk_text), ''))), 'C')`;
 }
 
 /**

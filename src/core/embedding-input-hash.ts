@@ -11,9 +11,13 @@
  * hash equals one recomputed from the current page, so an unchanged input keeps
  * its vector and any change to it (title, body in synopsis mode, model, column,
  * dimensions, wrapper bytes) nulls it. `embedded_text_hash` keeps its meaning.
+ * A chunk index text (doc2query, chunk-index-text.ts) carried by the context is
+ * part of the input: the wrapped input holds it, and the synopsis digest lists
+ * it. A chunk without one hashes exactly as before.
  */
 import { digest, sha256 } from './persistence/digest.ts';
-import { buildContextualPrefix, wrapChunkForEmbedding } from './embedding-context.ts';
+import { buildContextualPrefix, wrapChunkForEmbedding, wrapChunkWithIndexText } from './embedding-context.ts';
+import { indexTextFor, type ChunkIndexTexts } from './chunk-index-text.ts';
 
 export type EmbeddingTier = 'none' | 'title' | 'per_chunk_synopsis';
 
@@ -26,6 +30,8 @@ export interface EmbeddingInputContext {
   corpusGeneration: string | null;
   /** `synopsisBodyHash` of the page's installed chunk set. */
   bodyHash: string;
+  /** The page's chunk index texts when the setting is on (chunk-index-text.ts); absent or empty: none. */
+  indexTexts?: ChunkIndexTexts;
 }
 
 type HashedChunk = { chunk_text: string; chunk_source?: string | null };
@@ -45,11 +51,18 @@ export function isContextualMode(mode: string | null | undefined): boolean {
   return plainEmbeddingTier(mode) !== 'none';
 }
 
+/** Whether `chunk` carries an index text under `ctx` (a vector recorded without provenance cannot hold it). */
+export function hasIndexText(ctx: Pick<EmbeddingInputContext, 'indexTexts'>, chunk: HashedChunk): boolean {
+  return indexTextFor(ctx.indexTexts, chunk) !== null;
+}
+
 export function embeddingInputHash(ctx: EmbeddingInputContext, tier: EmbeddingTier, chunk: HashedChunk): string {
-  const raw = tier === 'none' || chunk.chunk_source === 'fenced_code';
+  const text = indexTextFor(ctx.indexTexts, chunk);
+  const raw = !text && (tier === 'none' || chunk.chunk_source === 'fenced_code');
   const input = raw ? chunk.chunk_text
-    : tier === 'title' ? wrapChunkForEmbedding(chunk.chunk_text, buildContextualPrefix(ctx.title, null), chunk.chunk_source)
-    : digest([ctx.title, ctx.bodyHash, chunk.chunk_text]);
+    : tier === 'per_chunk_synopsis' ? digest(text ? [ctx.title, ctx.bodyHash, chunk.chunk_text, text] : [ctx.title, ctx.bodyHash, chunk.chunk_text])
+    : text ? wrapChunkWithIndexText(chunk, tier === 'title' ? ctx.title : null, ctx.indexTexts)
+    : wrapChunkForEmbedding(chunk.chunk_text, buildContextualPrefix(ctx.title, null), chunk.chunk_source);
   return digest(['embedding-input-v1', ctx.column, ctx.model, ctx.dimensions, tier,
     tier === 'per_chunk_synopsis' ? ctx.corpusGeneration : null, sha256(input)]);
 }

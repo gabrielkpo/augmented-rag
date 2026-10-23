@@ -423,6 +423,43 @@ AS $fn$
 $fn$;
 -- END GENERATED from src/core/fts-language.ts (FTS_INPUT_FUNCTION_SQL)
 
+-- doc2query: index texts produced outside gbrain, added to a chunk's embedding
+-- input and to its keyword vector at weight C when search.chunk_index_text = d2q.
+-- BEGIN GENERATED from src/core/chunk-index-text-schema.ts (CHUNK_INDEX_TEXT_SCHEMA_SQL). Edit that file, then run: bun run build:schema
+CREATE TABLE IF NOT EXISTS chunk_index_text (
+  source_id      TEXT        NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+  slug           TEXT        NOT NULL,
+  chunk_hash     TEXT        NOT NULL,
+  kind           TEXT        NOT NULL CHECK (kind IN ('d2q')),
+  text           TEXT        NOT NULL,
+  model          TEXT        NOT NULL,
+  prompt_version TEXT        NOT NULL,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (source_id, slug, chunk_hash, kind)
+);
+CREATE OR REPLACE FUNCTION gbrain_chunk_index_text(p_page_id integer, p_chunk_source text, p_chunk_text text) RETURNS text
+  LANGUAGE plpgsql STABLE SET search_path = pg_catalog, public
+AS $fn$
+DECLARE
+  setting text;
+  t_text text;
+BEGIN
+  IF p_chunk_text IS NULL OR p_chunk_source IN ('fenced_code', 'image_asset') THEN
+    RETURN NULL;
+  END IF;
+  SELECT value INTO setting FROM config WHERE key = 'search.chunk_index_text';
+  IF lower(btrim(coalesce(setting, ''))) <> 'd2q' THEN
+    RETURN NULL;
+  END IF;
+  SELECT x.text INTO t_text
+    FROM pages p JOIN chunk_index_text x ON x.source_id = p.source_id AND x.slug = p.slug
+   WHERE p.id = p_page_id AND x.kind = 'd2q'
+     AND x.chunk_hash = encode(sha256(convert_to(p_chunk_text, 'UTF8')), 'hex');
+  RETURN t_text;
+END;
+$fn$;
+-- END GENERATED from src/core/chunk-index-text-schema.ts (CHUNK_INDEX_TEXT_SCHEMA_SQL)
+
 -- v0.20.0 Cathedral II: chunk-grain FTS trigger.
 -- Weight 'A' on doc_comment + symbol_name_qualified; weight 'B' on chunk_text.
 -- NL queries ("how do we handle errors") rank doc-comment hits above body text.
@@ -433,7 +470,8 @@ BEGIN
   NEW.search_vector :=
     setweight(to_tsvector('english', gbrain_fts_input(COALESCE(NEW.doc_comment, ''))), 'A') ||
     setweight(to_tsvector('english', gbrain_fts_input(COALESCE(NEW.symbol_name_qualified, ''))), 'A') ||
-    setweight(to_tsvector('english', gbrain_fts_input(COALESCE(NEW.chunk_text, ''))), 'B');
+    setweight(to_tsvector('english', gbrain_fts_input(COALESCE(NEW.chunk_text, ''))), 'B') ||
+    setweight(to_tsvector('english', gbrain_fts_input(COALESCE(gbrain_chunk_index_text(NEW.page_id, NEW.chunk_source, NEW.chunk_text), ''))), 'C');
   RETURN NEW;
 END;
 $fn$ LANGUAGE plpgsql;

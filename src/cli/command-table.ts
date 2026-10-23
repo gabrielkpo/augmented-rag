@@ -270,6 +270,8 @@ export const CLI_COMMANDS: readonly CliCommandRecord[] = [  // Pre-connect: disp
   { name: 'import', phase: 'post-connect', thinClient: 'none', json: 'document', help: () => import('./help/import.ts'), routes_source: true, load: () => import('./commands/import.ts') },
   { name: 'export', phase: 'post-connect', thinClient: 'refuse', selfHelp: true, routes_source: true, load: () => import('./commands/export.ts') },
   { name: 'files', phase: 'post-connect', thinClient: 'refuse', routes_source: true, load: () => import('./commands/files.ts') },
+  // thin client: chunk index texts are host-side derived index data (doc2query); a thin client has no chunks to write.
+  { name: 'chunk-text', phase: 'post-connect', thinClient: 'refuse', selfHelp: true, load: () => import('./commands/chunk-text.ts') },
   { name: 'embed', phase: 'post-connect', thinClient: 'refuse', selfHelp: true, json: 'document', routes_source: true, startup: 'observational', load: () => import('./commands/embed.ts') },
   { name: 'serve', phase: 'post-connect', thinClient: 'refuse', help: () => import('./help/serve.ts'), load: () => import('./commands/serve.ts') },
   // thin client: Agent-bootstrap [CX2-5]: the maintenance sweep runs against the LOCAL engine (the

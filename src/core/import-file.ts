@@ -47,12 +47,8 @@ import { computeEffectiveDate, fallbackCreatedAt, isValidTimeZone } from './effe
 import { MARKDOWN_CHUNKER_VERSION } from './chunkers/recursive.ts';
 import { logSlugFallback } from './audit-slug-fallback.ts';
 import { isEmbedSkipped } from './embed-skip.ts';
-import {
-  buildContextualPrefix,
-  modeRequiresSynopsis,
-  modeRequiresWrapper,
-  wrapChunkForEmbedding,
-} from './embedding-context.ts';
+import { modeRequiresSynopsis, modeRequiresWrapper, wrapChunkWithIndexText } from './embedding-context.ts';
+import { loadPageChunkIndexTexts } from './chunk-index-text.ts';
 import { writePageAliases } from './mentions/pass.ts';
 import { readMentionPolicy } from './mentions/policy.ts';
 import { warnOncePerProcess, validateSlug, contentHash, contentHashLegacy, ATOMS_SCAN_HASH_KEY } from './utils.ts';
@@ -674,6 +670,8 @@ export async function importFromContent(
   const reusable = !!existing && !existing.deleted_at && !opts.forceRechunk && !postCommitEmbedding && chunks.length > 0 && bodyStorageOf(existing) !== 'segmented'
     && !(opts.prepare && modeRequiresSynopsis(effectiveCRMode)) && !hasProtectedBody(`${existing.compiled_truth}\n${existing.timeline ?? ''}`) && !hasProtectedBody(`${parsed.compiled_truth}\n${parsed.timeline ?? ''}`);
   const reuseCtx = { slug, sourceId: sourceId ?? 'default', title: parsed.title, corpusGeneration, tier: effectiveCRMode === 'title' ? 'title' as const : 'none' as const };
+  // doc2query (chunk-index-text.ts): this embed and its provenance stamp both use the texts read here (none with the setting off).
+  const indexTexts = chunks.length > 0 ? await loadPageChunkIndexTexts(engine, sourceId ?? 'default', slug) : undefined;
   const reuseStoredVectors = (exec: BrainEngine, into: ChunkInput[], keepUnembedded = false) => reuseStoredChunkVectors(exec, into, { ...reuseCtx, prepared: !!opts.prepare, keepUnembedded });
   const reused = reusable && !noEmbed && !opts.prepare ? await reuseStoredVectors(engine, chunks) : new Map<number, number | null>();
 
@@ -681,11 +679,8 @@ export async function importFromContent(
   const embedChunks = async () => {
     const pending = chunks.map((_, i) => i).filter(i => !reused.has(i));
     if (noEmbed || pending.length === 0) return;
-    const prefix =
-      modeRequiresWrapper(effectiveCRMode) && !modeRequiresSynopsis(effectiveCRMode)
-        ? buildContextualPrefix(parsed.title, null)
-        : null;
-    const wrappedTexts = pending.map(i => prefix ? wrapChunkForEmbedding(chunks[i].chunk_text, prefix, chunks[i].chunk_source) : chunks[i].chunk_text);
+    const titled = modeRequiresWrapper(effectiveCRMode) && !modeRequiresSynopsis(effectiveCRMode);
+    const wrappedTexts = pending.map(i => wrapChunkWithIndexText(chunks[i], titled ? parsed.title : null, indexTexts));
     // #4616: store the usable vectors; refused chunks stay NULL for embed --stale.
     const { vectors: embeddings, refused } = await embedBatchKeepingUsable(wrappedTexts);
     embeddingPartial = refused;
@@ -822,7 +817,7 @@ export async function importFromContent(
       async () => {
         if (chunks.length > 0) {
           const embeddingColumn = await stampEmbeddingInputs(tx, fresh, null,
-            { title: parsed.title, tier: effectiveCRMode === 'title' ? 'title' : 'none', corpusGeneration });
+            { title: parsed.title, tier: effectiveCRMode === 'title' ? 'title' : 'none', corpusGeneration, indexTexts });
           await tx.upsertChunks(slug, kept.size ? fresh.filter((_, i) => !kept.has(i)) : fresh, { ...txOpts, ...(embeddingColumn ? { embeddingColumn } : {}), sealChunkerVersion: MARKDOWN_CHUNKER_VERSION,
             ...(pageId !== undefined ? { pageId: Number(pageId) } : {}), ...(deferSeal ? { deferSeal: true as const } : {}) });
           // v0.41.31: stamp embedding provenance when this import actually

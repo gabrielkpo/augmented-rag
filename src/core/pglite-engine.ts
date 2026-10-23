@@ -156,6 +156,9 @@ import type { KeywordPageWindow } from './search/keyword-statement.ts';
 import { frontmatterWhereSql } from './search/frontmatter-where.ts';
 import type { EmbeddingState, EmbeddingStateCounts, EmbeddingStateRow } from './embedding-state.ts';
 import * as chunksImpl from './engine-sql/chunks.ts';
+import * as chunkIndexTextImpl from './engine-sql/chunk-index-text.ts';
+import type { ChunkIndexTextInput, ChunkIndexTextPendingRow } from './engine-sql/chunk-index-text.ts';
+import type { ChunkIndexTextKind, ChunkIndexTextRow } from './chunk-index-text.ts';
 import * as pageBodyImpl from './engine-sql/page-body.ts';
 import type { BodyFlipInput, BodyFlipResult, BodyRegion, BodyStagingInput, BodyStagingState, ManifestRow, ManifestRowInput, SegmentChunkInput,
   SegmentedPageMeta, SegmentSweepOptions, SegmentSweepResult, SegmentTextInput } from './page-body/types.ts';
@@ -1807,6 +1810,18 @@ export class PGLiteEngine implements BrainEngine {
 
   getChunkWindows(requests: ChunkWindowRequest[], opts: ChunkWindowOpts): Promise<ChunkWindowPage[]> { return chunksImpl.getChunkWindows(scopedRead(this.engineSql), requests, opts); }
 
+  async getChunkIndexTexts(refs: ReadonlyArray<{ sourceId: string; slug: string }>, opts: { kind: ChunkIndexTextKind }): Promise<ChunkIndexTextRow[]> {
+    return chunkIndexTextImpl.getChunkIndexTexts(unscopedExecutor(this.engineSql, 'chunk index texts: indexing read by explicit page keys'), refs, opts);
+  }
+  async putChunkIndexTexts(rows: ReadonlyArray<ChunkIndexTextInput>): Promise<number> {
+    return chunkIndexTextImpl.putChunkIndexTexts(this.engineSql, rows);
+  }
+  async listChunkIndexTextPending(opts: { kind: ChunkIndexTextKind; minChunks: number; sourceId?: string; limitPages?: number }): Promise<ChunkIndexTextPendingRow[]> {
+    return chunkIndexTextImpl.listChunkIndexTextPending(unscopedExecutor(this.engineSql, 'chunk index texts: host-only pending listing'), opts);
+  }
+  async pruneChunkIndexTexts(opts: { kind: ChunkIndexTextKind; all?: boolean }): Promise<number> {
+    return chunkIndexTextImpl.pruneChunkIndexTexts(this.engineSql, opts);
+  }
   async getChunks(slug: string, opts?: { sourceId?: string; sourceIds?: string[]; includeEmbedding?: boolean; excludePrivate?: boolean; requireSafeChunks?: boolean; includeUnsealed?: boolean }): Promise<Chunk[]> {
     const sourceIds = opts?.sourceIds && opts.sourceIds.length > 0 ? opts.sourceIds : undefined;
     const sourceId = opts?.sourceId ?? 'default';
