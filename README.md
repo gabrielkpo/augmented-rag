@@ -1,16 +1,38 @@
 # augmented-rag: measured retrieval for gbrain
 
-[![CI](https://github.com/gabrielkpo/gbrain/actions/workflows/ci.yml/badge.svg)](https://github.com/gabrielkpo/gbrain/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/gabrielkpo/gbrain/actions/workflows/codeql.yml/badge.svg)](https://github.com/gabrielkpo/gbrain/actions/workflows/codeql.yml)
+[![CI](https://github.com/gabrielkpo/augmented-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/gabrielkpo/augmented-rag/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/gabrielkpo/augmented-rag/actions/workflows/codeql.yml/badge.svg)](https://github.com/gabrielkpo/augmented-rag/actions/workflows/codeql.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-A research fork of [gbrain by Garry Tan](https://github.com/garrytan/gbrain). It measures gbrain's retrieval on a real 1,200-page knowledge base and keeps only the changes that a question bench and a holdout prove useful: reranker fusion, doc2query and page supersession, all opt-in.
+**This repository is a fork of [gbrain](https://github.com/garrytan/gbrain), created by Garry Tan.** gbrain itself (the engines, hybrid search, MCP server, schema packs, skills and nearly all of the code here) is his work and that of its contributors. This fork adds a measurement study of gbrain's retrieval on a real 1,200-page knowledge base, and a few opt-in patches that the study justified: reranker fusion, doc2query and page supersession.
 
-> **Status:** research complete for the first round (October 2026), changes running daily on one brain. They are local patches, not merged upstream, so expect them to move with upstream releases. The method and every number are in [docs/fork/research/](docs/fork/research/README.md).
+> **Status:** first research round complete (21 to 23 October 2026); the patches run daily on one brain. They are not merged upstream and will move with upstream releases. The method and every number are in [docs/fork/research/](docs/fork/research/README.md).
+
+## What is upstream, what is ours
+
+| Upstream gbrain (Garry Tan and contributors) | This fork |
+|---|---|
+| The whole system: PGLite and Postgres engines, hybrid search (keywords, vectors, graph), reranker providers, MCP server, CLI, sync, skills | Question benches with holdouts, and the scripts to run them (`ops/eval/`) |
+| The `gbrain eval --qrels` harness the benches run on | A diagnosis of where retrieval failed on this corpus |
+| | Patches, each opt-in and off by default: reranker fusion, page title and rubric for the reranker, doc2query storage (`chunk_index_text`), supersession, one `eval --expand` fix |
+| | A written record of what was tried and dropped, with numbers |
+
+The full list of fork commits is in appendix B of the [write-up](docs/fork/research/gbrain-2.0-paper.md).
+
+## Method
+
+The study treats each idea as a hypothesis to test, not a feature to add:
+
+1. **Benches first.** Question sets in gbrain's native qrels format: a tuning bench (107 questions, half of them real queries from agent sessions), holdout A (41) to validate a choice, holdout B (41) opened once at the end. No question is shared between them.
+2. **One change at a time**, measured with Recall@5, MRR and nDCG@5 against the previous configuration.
+3. **Isolated labs.** Index changes run on fresh lab brains built from a snapshot, never on the live brain.
+4. **Paired bootstrap confidence intervals** for every comparison; a gain inside the noise counts as no gain.
+5. **End-to-end check.** A multi-step bench where Claude answers with read-only gbrain tools and a second model judges the answers against verified references.
+6. **Negative results are kept.** Five of the ideas tested brought nothing, and they are documented as carefully as the ones that shipped.
 
 ## Why
 
-gbrain gives an agent a memory it controls: Markdown pages, Postgres with pgvector, hybrid search, an MCP server. Its defaults are tuned on the author's own brain and on public benchmarks. On a different corpus (mostly chat threads, meeting notes and project pages, mostly in French) the right page was in the top 5 for only 68% of real questions. Adding features would not tell which part was failing. This fork builds question benches first, then changes one thing at a time and keeps it only if the numbers move on data it was not tuned on.
+gbrain gives an agent a memory it controls: Markdown pages, Postgres with pgvector, hybrid search, an MCP server. Its defaults are tuned on the author's own brain and on public benchmarks. On a different corpus (mostly chat threads, meeting notes and project pages, mostly in French) the right page was in the top 5 for only 68% of real questions. The fork measures before it changes anything (see Method).
 
 One rule shapes every change: **gbrain indexes, Claude reasons**. gbrain calls no chat model; anything that writes or judges goes through Claude, outside gbrain.
 
@@ -86,7 +108,7 @@ Measured and dropped: query expansion (no gain, +5 s per search), per-chunk cont
 Prerequisites: [Bun](https://bun.sh) ≥ 1.4, Postgres with pgvector (or the embedded PGLite engine), an embeddings key, and a reranker key for the fusion step.
 
 ```bash
-git clone https://github.com/gabrielkpo/gbrain.git && cd gbrain
+git clone https://github.com/gabrielkpo/augmented-rag.git && cd augmented-rag
 bun install && bun link                       # installs the gbrain CLI from this fork
 gbrain init                                   # creates the brain (see docs/INSTALL.md)
 gbrain config set search.source_boosts none   # the largest single gain
@@ -116,7 +138,7 @@ The benches reference pages of a private brain, so the question sets (`qrels*.js
 ## Limitations and next
 
 - One corpus: conclusions hold for chat-heavy, mostly French content of about 1,200 pages.
-- Bench "real queries" are those Claude sent during sessions, often keyword bags.
+- Bench "real queries" are those Claude sent during sessions.
 - Labels miss some relevant pages; the agentic judge (Claude Haiku) varies by about ±0.15 between identical runs.
 - The reranker can move a page by one place between calls.
 - Local patches must be carried at each upstream upgrade until they are merged upstream.
@@ -135,4 +157,4 @@ Every change goes through a pull request with a Conventional Commits title, a se
 
 ## License and credits
 
-MIT, see [LICENSE](LICENSE). gbrain is Garry Tan's project and the large majority of this code is his and its contributors'; this fork adds the measurement work and the patches listed in appendix B of the write-up.
+MIT, see [LICENSE](LICENSE), which keeps Garry Tan's copyright. gbrain is Garry Tan's project: thanks to him and to gbrain's contributors for building and openly publishing the system this study stands on. This fork only adds the measurement work and the patches listed above; findings that would help upstream are meant to be offered back to it.
