@@ -1,0 +1,41 @@
+# CI for this fork. Upstream's workflows (test.yml and the others) run on
+# upstream's paid runners and are disabled in this repository's Actions settings;
+# their files are kept unchanged so upstream merges stay clean. This job checks
+# what the fork can afford on a standard runner: the whole tree typechecks, the
+# fork's own tests pass, and the Python ops scripts compile.
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [master]
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.3
+      - name: Install dependencies
+        run: bun scripts/ci-bun-install.ts --frozen-lockfile
+      - name: Typecheck
+        run: bun run typecheck
+      - name: Fork tests
+        # The tests added or changed by this fork's own commits.
+        run: >-
+          bun test --timeout=60000
+          test/chunk-index-text.test.ts
+          test/search-page-supersession.test.ts
+          test/rerank-fusion-local.test.ts
+          test/rerank-doc-cap.test.ts
+          test/config-search-registry.test.ts
+          test/cli-dispatch-phase.test.ts
+          test/large-pages/segment-vector-reuse.test.ts
+      - name: Ops scripts compile
+        run: python3 -m compileall -q ops
