@@ -34,7 +34,7 @@ remote. It never pushes `master` to the public remote.
 ## Setup on a new clone of the private repository
 
 ```bash
-git remote add public https://github.com/<you>/gbrain.git   # the public fork
+git remote add public https://github.com/<you>/augmented-rag.git   # the public fork
 git fetch public && git branch --track public public/master
 ln -sf ../../ops/fork-sync/guard-pre-push.sh .git/hooks/pre-push
 ```
@@ -44,12 +44,16 @@ by the nightly job through `~/.gbrain/nightly.env`.
 
 ## Public repository rules
 
+The public fork was renamed from `gabrielkpo/gbrain` to `gabrielkpo/augmented-rag` on 23 October 2026. GitHub
+redirects the old URL, so existing remotes and the private fork keep working; point them at the new name when
+convenient (`git remote set-url public https://github.com/gabrielkpo/augmented-rag.git`).
+
 The public fork follows the owner's GitHub conduct guide:
 
 - `master` is protected by the `protect-main` ruleset: no direct push, no force-push, a pull request with green
   checks (`test`, `gitleaks`, `semantic-title`), squash merge only. `sync.sh` therefore cannot push `public` straight
   to the public `master`: push the `public` branch as a feature branch, open a pull request, and merge it once green.
-- In a clone of the public fork, run `gh repo set-default gabrielkpo/gbrain` once: without it, `gh pr create`
+- In a clone of the public fork, run `gh repo set-default gabrielkpo/augmented-rag` once: without it, `gh pr create`
   opens the pull request on upstream `garrytan/gbrain`.
 - Upstream's workflows run on upstream's paid runners and are disabled in this repository's Actions settings.
   After an upstream merge that adds a workflow, disable it too (`gh workflow disable <name>`). The fork's own CI

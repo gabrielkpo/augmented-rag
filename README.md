@@ -1,7 +1,7 @@
 # augmented-rag: measured retrieval for gbrain
 
-[![CI](https://github.com/gabrielkpo/gbrain/actions/workflows/ci.yml/badge.svg)](https://github.com/gabrielkpo/gbrain/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/gabrielkpo/gbrain/actions/workflows/codeql.yml/badge.svg)](https://github.com/gabrielkpo/gbrain/actions/workflows/codeql.yml)
+[![CI](https://github.com/gabrielkpo/augmented-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/gabrielkpo/augmented-rag/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/gabrielkpo/augmented-rag/actions/workflows/codeql.yml/badge.svg)](https://github.com/gabrielkpo/augmented-rag/actions/workflows/codeql.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 A research fork of [gbrain by Garry Tan](https://github.com/garrytan/gbrain). It measures gbrain's retrieval on a real 1,200-page knowledge base and keeps only the changes that a question bench and a holdout prove useful: reranker fusion, doc2query and page supersession, all opt-in.
@@ -86,7 +86,7 @@ Measured and dropped: query expansion (no gain, +5 s per search), per-chunk cont
 Prerequisites: [Bun](https://bun.sh) ≥ 1.4, Postgres with pgvector (or the embedded PGLite engine), an embeddings key, and a reranker key for the fusion step.
 
 ```bash
-git clone https://github.com/gabrielkpo/gbrain.git && cd gbrain
+git clone https://github.com/gabrielkpo/augmented-rag.git && cd augmented-rag
 bun install && bun link                       # installs the gbrain CLI from this fork
 gbrain init                                   # creates the brain (see docs/INSTALL.md)
 gbrain config set search.source_boosts none   # the largest single gain
