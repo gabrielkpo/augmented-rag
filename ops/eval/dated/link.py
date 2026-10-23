@@ -31,7 +31,9 @@ PROMPT = """Voici des faits datés sur l'entité `{entity}`, extraits de plusieu
 Réponds uniquement en JSON : {{"duplicates": [["id", "id"]], "supersessions": [{{"new": "id", "old": "id"}}]}}"""
 
 
-def load_extractions():
+def load_extractions(apply_reentity=True):
+    remap_path = os.path.join(WORK, 'reentity.json')
+    remap = json.load(open(remap_path, encoding='utf-8')) if apply_reentity and os.path.exists(remap_path) else {}
     facts = []
     for path in sorted(glob.glob(os.path.join(WORK, 'extract', '*.json'))):
         data = json.load(open(path, encoding='utf-8'))
@@ -42,7 +44,10 @@ def load_extractions():
                 continue
             gid = f"{page}#{f['id']}"
             local[f['id']] = gid
-            facts.append({**f, 'id': gid, 'page': page, 'page_date': data.get('page_date')})
+            fact = {**f, 'id': gid, 'page': page, 'page_date': data.get('page_date')}
+            if remap.get(gid):  # subject entity re-assigned by reentity.py
+                fact['extracted_entity'], fact['entity'] = f['entity'], remap[gid]
+            facts.append(fact)
         for f in facts:
             if f['page'] == page and f.get('supersedes'):
                 f['supersedes'] = local.get(f['supersedes'])

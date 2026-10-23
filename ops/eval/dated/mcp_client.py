@@ -39,8 +39,9 @@ class Lab:
         """Tool result as parsed JSON (or text), and whether the tool reported an error."""
         res = self.rpc('tools/call', {'name': tool, 'arguments': args})
         text = ''.join(c.get('text', '') for c in res.get('content') or [])
+        # The JSON body can be followed by `[gbrain notice ...]` blocks: read the leading JSON value.
         try:
-            body = json.loads(text)
+            body, _ = json.JSONDecoder().raw_decode(text.lstrip())
         except ValueError:
             body = text
         return body, bool(res.get('isError'))

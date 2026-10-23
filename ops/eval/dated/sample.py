@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Draws the hand-check sample: N facts from results/work/facts.json (fixed seed), one per page first.
+"""Draws the hand-check sample: N facts of the pages listed in --pages (the extractions, before linking) (fixed seed), one per page first.
 
 For each fact, prints the claim, valid_from, date basis, evidence and the page lines that hold
 the evidence's dates, read from the LAB database, so a reviewer can check date and claim.
@@ -11,6 +11,7 @@ import os
 import random
 import re
 import subprocess
+import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -19,9 +20,13 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--lab', required=True)
     ap.add_argument('--n', type=int, default=30)
+    ap.add_argument('--pages', default=os.path.join(HERE, 'results', 'pages.txt'))
     ap.add_argument('--seed', type=int, default=20261023)
     args = ap.parse_args()
-    facts = json.load(open(os.path.join(HERE, 'results', 'work', 'facts.json'), encoding='utf-8'))['facts']
+    sys.path.insert(0, HERE)
+    from link import load_extractions
+    pages = {l.strip() for l in open(args.pages, encoding='utf-8') if l.strip()}
+    facts = [f for f in load_extractions() if f['page'] in pages]
     rng = random.Random(args.seed)
     rng.shuffle(facts)
     seen, sample = set(), []
