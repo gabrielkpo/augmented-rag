@@ -1,0 +1,18 @@
+# Paths that never leave the private repository (extended regular expressions, one per line,
+# matched against repository-relative paths). Read by guard-pre-push.sh and sync.sh.
+^brain/
+^private/
+(^|/)qrels[^/]*\.json$
+(^|/)results/
+(^|/)RESULTATS\.md$
+^ops/eval/resultats-
+(^|/)supersessions\.json$
+(^|/)router-labels\.json$
+^ops/eval/router/bench-spec\.json$
+(^|/)controle-echantillon\.md$
+(^|/)[^/]*review\.md$
+^ops/com\.[^/]*\.plist$
+^ops/slack-mentions-ingest\.sh$
+^ops/backfill-meeting-links\.py$
+^ops/migrate-gbrain-to-postgres\.sh$
+^ops/gbrain-dir-pattern\.patch$

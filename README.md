@@ -1,3 +1,24 @@
+> [!NOTE]
+> **This is a research fork of [garrytan/gbrain](https://github.com/garrytan/gbrain)** by Gabriel Kpodoh.
+> It measured gbrain's retrieval on one real work brain (about 1,160 pages), fixed what the measurements
+> pointed to, and tested extensions one at a time against question benches with holdouts.
+>
+> | Bench (Recall@5 / MRR / nDCG@5) | Upstream defaults | This fork |
+> |---|---|---|
+> | 107 questions (tuning) | 0.68 / 0.60 / 0.58 | **0.92 / 0.86 / 0.85** |
+> | 41 questions, holdout opened once | — | **0.92 / 0.89 / 0.88** |
+> | 40 questions answered by a middle chunk of a long page | 0.57 / 0.51 / 0.53 | **0.78 / 0.70 / 0.72** |
+>
+> What it adds, all opt-in: reranker fusion with the hybrid order, page titles and a described rubric for the
+> reranker, **doc2query** stored apart from the page body (`chunk_index_text`), a **supersession** step after the
+> reranker, a brain health report with nightly hygiene, and the benches used to decide. What it measured and
+> dropped is documented too: query expansion, per-chunk context, a thematic router, iterative-search rules,
+> strategy routing.
+>
+> Start with **[docs/fork/research/README.md](docs/fork/research/README.md)**, or the full write-up
+> **[docs/fork/research/gbrain-2.0-paper.md](docs/fork/research/gbrain-2.0-paper.md)**. Everything below this note is
+> upstream's README.
+
 <h1><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/brand/gbrain-wordmark-light.svg"><img src="docs/images/brand/gbrain-wordmark.svg" alt="GBrain" height="52"></picture></h1>
 
 **Give the agent you already use a memory you control.** GBrain stores explicit facts with their sources, supports corrections and withdrawal, and makes the same memory available across your agents. Start with keyless memory and keyword retrieval; add semantic search, synthesis, and background enrichment when you need them.
