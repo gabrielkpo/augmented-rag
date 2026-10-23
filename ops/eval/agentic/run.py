@@ -42,13 +42,13 @@ PROMPT = (
 )
 
 
-def run_one(q, variant, model, out_dir, cwd, mcp_config=''):
+def run_one(q, variant, model, out_dir, cwd, mcp_config='', extra_tools=()):
     cmd = [
         'claude', '-p', PROMPT.format(q=q['query']),
         '--model', model,
         '--output-format', 'stream-json', '--verbose',
         '--settings', json.dumps({'disableAllHooks': True}),
-        '--allowedTools', ','.join(READ_TOOLS),
+        '--allowedTools', ','.join(READ_TOOLS + list(extra_tools)),
         '--no-session-persistence',
     ]
     # Copy of the database (lab): the gbrain MCP server of this file replaces the user's.
@@ -109,6 +109,7 @@ def main():
     ap.add_argument('--jobs', type=int, default=3)
     ap.add_argument('--only', default='')
     ap.add_argument('--mcp-config', default='', help='MCP config file pointing at a lab gbrain server')
+    ap.add_argument('--extra-tools', default='', help='comma-separated tools allowed on top of READ_TOOLS, for every variant (e.g. mcp__gbrain__recall)')
     args = ap.parse_args()
 
     queries = json.load(open(args.qrels, encoding='utf-8'))['queries']
@@ -126,7 +127,8 @@ def main():
     jobs = [(q, v) for q in queries for v in variants]
     recs = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as ex:
-        futs = {ex.submit(run_one, q, v, args.model, out_dir, cwd, args.mcp_config): (q['id'], v) for q, v in jobs}
+        extra = [t for t in args.extra_tools.split(',') if t]
+        futs = {ex.submit(run_one, q, v, args.model, out_dir, cwd, args.mcp_config, extra): (q['id'], v) for q, v in jobs}
         for fut in concurrent.futures.as_completed(futs):
             qid, v = futs[fut]
             try:
