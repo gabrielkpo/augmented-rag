@@ -12,7 +12,7 @@
 (^|/)controle-echantillon\.md$
 (^|/)[^/]*review\.md$
 ^ops/com\.[^/]*\.plist$
-^ops/slack-mentions-ingest\.sh$
-^ops/backfill-meeting-links\.py$
+^ops/[^/]*-ingest\.sh$
+^ops/backfill-[^/]*\.py$
 ^ops/migrate-gbrain-to-postgres\.sh$
 ^ops/gbrain-dir-pattern\.patch$

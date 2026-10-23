@@ -380,7 +380,7 @@ Holdout scores are close to v2: nothing points to overfitting. The weekly bench 
 
 | Trial | Result | Explanation |
 |---|---|---|
-| Query expansion (Claude Haiku through the CLI) | 0.85 / 0.74 / 0.73 against 0.86 / 0.73 / 0.73; 12 questions better, 10 worse; about 5 s more per search | Consistent with the gbrain team's measurement (1 recall point for about 2 s). Along the way, `gbrain eval --expand` never called the model: bug fixed in the fork (`6e7daa1b1`) |
+| Query expansion (Claude Haiku through the CLI) | 0.85 / 0.74 / 0.73 against 0.86 / 0.73 / 0.73; 12 questions better, 10 worse; about 5 s more per search | Consistent with the gbrain team's measurement (1 recall point for about 2 s). Along the way, `gbrain eval --expand` never called the model: bug fixed in the fork (`985a46f8e`) |
 | Per-chunk context (Haiku, 7 pages, 21/10 morning) | No gain (−3 points, within noise) | Inconclusive at the time: 7 pages out of 1,162, and the missed questions were missed because of the boosts, not the context |
 | Per-chunk context, redone on 2,513 chunks (21/10) | Targeted bench +0.02 MRR, within noise | Dropped: it describes the page, which rewritten titles already do (§5 bis.1). doc2query fixes the failure instead |
 | Autocut | No effect on the metrics | It shortens the lists, which these metrics do not measure |
@@ -767,7 +767,7 @@ Every verdict cites the precise contradiction. The known pair (the older agent-d
 | `behind`: the current page takes the place | 0.94 / 0.84 / 0.84 | 0.90 / 0.82 / 0.81 |
 | `substitute`: the stale page leaves | 0.91 / 0.83 / 0.82 | 0.90 / 0.82 / 0.82 |
 
-**Why nothing wins.** A "superseded" page is superseded only for the **current state**. Without Jev, where everything is deterministic, the ×0.5 penalty changes 9 questions of v2: 5 go up (the right page moves ahead; for example a "which vendor do we use for X" question goes from MRR 0.50 to 1.00), and 4 go down, exactly those that expect the old page for its history or design (questions about how a family of agents was designed, about earlier prompt drafts, about a project's earlier status, about an earlier automation workflow). Substitution drops the first three of those to 0. No bench question opposes a stale page to its replacement.
+**Why nothing wins.** A "superseded" page is superseded only for the **current state**. Without Jev, where everything is deterministic, the ×0.5 penalty changes 9 questions of v2: 5 go up (the right page moves ahead; one question goes from MRR 0.50 to 1.00), and 4 go down, exactly those that expect the old page for its history or design (questions about the history or the earlier design of a topic). Substitution drops the first three of those to 0. No bench question opposes a stale page to its replacement.
 
 **On the known failure (question mh-06)**, the stale page disappears from the citations: 2 answers out of 2 before, 0 out of 4 after. In one `annotate` answer, Claude writes it itself: the two older pages are marked as superseded by the system page, which it therefore used. The judged score cannot settle it: ±0.15 of noise between two identical runs, a Haiku judge that marks correct answers as wrong, and quota exhausted before a second judge could run.
 
@@ -805,7 +805,7 @@ These are the queries the agent sends, not the user's requests: Claude splits a 
 | Image only, other skill | 5 | 5 |
 | **Request typed by the author** | **42** | **49** |
 
-Only 12% of search calls answer a typed request. Of the 42 typed requests, classified by hand: 3 (7%) are strict overviews ("given everything we did on this project, what are the use cases?", "everything I have done since joining, ranked by risk", "where does this project stand against its goal?"); 7 (17%) ask the status of a project ("where is X, what is in production?"); 1 comparison; 1 bridge (find a person by role); 30 (71%) precise or other. **3 real overview requests in two months, 10 counting project status.**
+Only 12% of search calls answer a typed request. Of the 42 typed requests, classified by hand: 3 (7%) are strict overviews (a synthesis across a whole project or a whole period); 7 (17%) ask the status of a project; 1 comparison; 1 bridge (find a person by role); 30 (71%) precise or other. **3 real overview requests in two months, 10 counting project status.**
 
 **Overview bench.** 20 questions (5 about a person, 4 about a period, 11 about a theme), written before the summaries from explicit selection rules. For each, Claude Sonnet read up to 45 pages and proposed 4 to 6 expected elements, each with the page that carries it and a verbatim quote. Every quote was checked automatically against the database; 5 elements out of 117 were dropped for lack of a match, and the 112 kept were reviewed by hand.
 
