@@ -64,6 +64,7 @@ def run_one(q, variant, model, out_dir, cwd, mcp_config='', extra_tools=()):
     elapsed = time.time() - start
 
     searches, reads, tools, final, result = [], [], [], '', {}
+    tool_chars = 0
     for line in proc.stdout.splitlines():
         try:
             ev = json.loads(line)
@@ -78,6 +79,14 @@ def run_one(q, variant, model, out_dir, cwd, mcp_config='', extra_tools=()):
                         searches.append(args.get('query', ''))
                     if name == 'mcp__gbrain__get_page' and args.get('slug'):
                         reads.append(str(args['slug']).split(':', 1)[-1])
+        elif ev.get('type') == 'user':
+            # Size of what the tools handed back to the model (the context cost of a strategy).
+            for block in (ev.get('message') or {}).get('content') or []:
+                if isinstance(block, dict) and block.get('type') == 'tool_result':
+                    content = block.get('content')
+                    if isinstance(content, list):
+                        content = ''.join(c.get('text', '') for c in content if isinstance(c, dict))
+                    tool_chars += len(content or '')
         elif ev.get('type') == 'result':
             result = ev
             final = ev.get('result') or ''
@@ -93,6 +102,7 @@ def run_one(q, variant, model, out_dir, cwd, mcp_config='', extra_tools=()):
         'duration_s': round(elapsed, 1), 'cost_usd': result.get('total_cost_usd'),
         'cite': sum(s in cited for s in required) / len(required),
         'lu': sum(s in reads or s in cited for s in required) / len(required),
+        'tool_result_chars': tool_chars, 'usage': result.get('usage'),
         'answer': final, 'exit': proc.returncode,
     }
     rec['ok'] = rec['cite'] == 1.0

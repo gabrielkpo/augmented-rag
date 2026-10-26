@@ -85,6 +85,9 @@ def main():
         for g, ids in groups:
             diffs = []
             for i in ids:
+                if other == 'routeur' and route[i] == 'base':
+                    diffs.append(0.0)  # left to base: the router is base by construction
+                    continue
                 a = qscore(runs, i, route[i] if other == 'routeur' else other)
                 b = qscore(runs, i, 'base')
                 if a is not None and b is not None:
@@ -101,18 +104,23 @@ def main():
         out.append(f'Oracle (meilleure stratégie par question) sur les {len(full)} questions où les trois sont mesurées : '
                    f'{orc:.2f} ; base {mean([qscore(runs, i, "base") for i in full]):.2f} ; routeur {mean([qscore(runs, i, route[i]) for i in full]):.2f}.\n')
 
-    # Pass-to-pass agreement of base.
-    pairs = [runs[(i, 'base')] for i in qs if len(runs.get((i, 'base'), [])) >= 2]
-    same = sum(r[0]['juge']['verdict'] == r[1]['juge']['verdict'] for r in pairs)
-    out.append(f'Accord passage à passage de base : {same}/{len(pairs)} questions avec le même verdict aux deux passages.\n')
+    # Pass-to-pass agreement, per variant.
+    for v in variants:
+        pairs = [runs[(i, v)] for i in qs if len(runs.get((i, v), [])) >= 2]
+        if pairs:
+            same = sum(r[0]['juge']['verdict'] == r[1]['juge']['verdict'] for r in pairs)
+            out.append(f'Accord passage à passage de {v} : {same}/{len(pairs)} questions avec le même verdict aux deux passages.\n')
 
     out.append('### Coût par réponse\n')
-    out.append('| Variante | Réponses | Recherches / réponse | Appels d\'outils / réponse | Durée (s) / réponse | Coût ($) |')
-    out.append('|---|---|---|---|---|---|')
+    out.append('| Variante | Réponses | Recherches / réponse | Appels d\'outils / réponse | Caractères rendus par les outils / réponse | Tokens d\'entrée / réponse | Durée (s) / réponse | Coût ($) |')
+    out.append('|---|---|---|---|---|---|---|---|')
     for v in variants:
         rs = [r for (i, vv), lst in runs.items() if vv == v for r in lst]
+        chars = [r['tool_result_chars'] for r in rs if 'tool_result_chars' in r]
+        toks = [sum((r['usage'] or {}).get(k, 0) or 0 for k in ('input_tokens', 'cache_read_input_tokens', 'cache_creation_input_tokens'))
+                for r in rs if r.get('usage')]
         out.append(f"| {v} | {len(rs)} | {mean([len(r['searches']) for r in rs]):.1f} | {mean([r['tool_calls'] for r in rs]):.1f} | "
-                   f"{mean([r['duration_s'] for r in rs]):.0f} | {sum((r.get('cost_usd') or 0) for r in rs):.2f} |")
+                   f"{mean(chars):.0f} | {mean(toks):.0f} | {mean([r['duration_s'] for r in rs]):.0f} | {sum((r.get('cost_usd') or 0) for r in rs):.2f} |")
     print('\n'.join(out))
 
 
