@@ -65,9 +65,18 @@ def main():
     refs = {q['id']: q.get('answer', '') for q in json.load(open(args.qrels, encoding='utf-8'))['queries']}
 
     for d in args.dirs:
-        files = [f for f in sorted(glob.glob(os.path.join(d, '*.json'))) if os.path.basename(f).rsplit('-', 1)[0] in refs]
+        # The question id is read from each record, not from its file name: a variant
+        # name may contain a hyphen (e.g. return-section).
+        files = {}
+        for f in sorted(glob.glob(os.path.join(d, '*.json'))):
+            try:
+                qid = json.load(open(f, encoding='utf-8')).get('id')
+            except (ValueError, AttributeError):
+                continue
+            if qid in refs:
+                files[f] = qid
         with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as ex:
-            recs = list(ex.map(lambda f: judge(f, refs[os.path.basename(f).rsplit('-', 1)[0]], args.model), files))
+            recs = list(ex.map(lambda f: judge(f, refs[files[f]], args.model), files))
         rows = ['| Variante | Origine | n | Juste | Partiel | Faux | Score | Citées | Recherches | Durée (s) |', '|---|---|---|---|---|---|---|---|---|---|']
         keys = sorted({(r['variant'], r['source']) for r in recs}) + sorted({(r['variant'], 'tout') for r in recs})
         for v, src in keys:

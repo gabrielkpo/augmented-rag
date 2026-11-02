@@ -42,13 +42,13 @@ PROMPT = (
 )
 
 
-def run_one(q, variant, model, out_dir, cwd, mcp_config=''):
+def run_one(q, variant, model, out_dir, cwd, mcp_config='', extra_tools=()):
     cmd = [
         'claude', '-p', PROMPT.format(q=q['query']),
         '--model', model,
         '--output-format', 'stream-json', '--verbose',
         '--settings', json.dumps({'disableAllHooks': True}),
-        '--allowedTools', ','.join(READ_TOOLS),
+        '--allowedTools', ','.join(READ_TOOLS + list(extra_tools)),
         '--no-session-persistence',
     ]
     # Copy of the database (lab): the gbrain MCP server of this file replaces the user's.
@@ -64,6 +64,8 @@ def run_one(q, variant, model, out_dir, cwd, mcp_config=''):
     elapsed = time.time() - start
 
     searches, reads, tools, final, result = [], [], [], '', {}
+    tool_chars = 0
+    units = []  # return_unit passed on each search/query call ('' = left to the server default)
     for line in proc.stdout.splitlines():
         try:
             ev = json.loads(line)
@@ -76,8 +78,17 @@ def run_one(q, variant, model, out_dir, cwd, mcp_config=''):
                     tools.append(name)
                     if name in SEARCH_TOOLS:
                         searches.append(args.get('query', ''))
+                        units.append(args.get('return_unit', ''))
                     if name == 'mcp__gbrain__get_page' and args.get('slug'):
                         reads.append(str(args['slug']).split(':', 1)[-1])
+        elif ev.get('type') == 'user':
+            # Size of what the tools handed back to the model (the context cost of a strategy).
+            for block in (ev.get('message') or {}).get('content') or []:
+                if isinstance(block, dict) and block.get('type') == 'tool_result':
+                    content = block.get('content')
+                    if isinstance(content, list):
+                        content = ''.join(c.get('text', '') for c in content if isinstance(c, dict))
+                    tool_chars += len(content or '')
         elif ev.get('type') == 'result':
             result = ev
             final = ev.get('result') or ''
@@ -93,6 +104,7 @@ def run_one(q, variant, model, out_dir, cwd, mcp_config=''):
         'duration_s': round(elapsed, 1), 'cost_usd': result.get('total_cost_usd'),
         'cite': sum(s in cited for s in required) / len(required),
         'lu': sum(s in reads or s in cited for s in required) / len(required),
+        'search_units': units, 'tool_result_chars': tool_chars, 'usage': result.get('usage'),
         'answer': final, 'exit': proc.returncode,
     }
     rec['ok'] = rec['cite'] == 1.0
@@ -109,6 +121,7 @@ def main():
     ap.add_argument('--jobs', type=int, default=3)
     ap.add_argument('--only', default='')
     ap.add_argument('--mcp-config', default='', help='MCP config file pointing at a lab gbrain server')
+    ap.add_argument('--extra-tools', default='', help='comma-separated tools allowed on top of READ_TOOLS, for every variant (e.g. mcp__gbrain__recall)')
     args = ap.parse_args()
 
     queries = json.load(open(args.qrels, encoding='utf-8'))['queries']
@@ -126,7 +139,8 @@ def main():
     jobs = [(q, v) for q in queries for v in variants]
     recs = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as ex:
-        futs = {ex.submit(run_one, q, v, args.model, out_dir, cwd, args.mcp_config): (q['id'], v) for q, v in jobs}
+        extra = [t for t in args.extra_tools.split(',') if t]
+        futs = {ex.submit(run_one, q, v, args.model, out_dir, cwd, args.mcp_config, extra): (q['id'], v) for q, v in jobs}
         for fut in concurrent.futures.as_completed(futs):
             qid, v = futs[fut]
             try:

@@ -1,0 +1,50 @@
+diff --git a/src/core/search/cosine-rescore.ts b/src/core/search/cosine-rescore.ts
+index 86eb49824..412cf2ec2 100644
+--- a/src/core/search/cosine-rescore.ts
++++ b/src/core/search/cosine-rescore.ts
+@@ -63,6 +63,12 @@ export async function cosineReScore(
+     if (chunkIds.length > 0) {
+       try {
+         cosines = await sqlCosines(engine, chunkIds, column, queryEmbedding);
++        // LAB ONLY (twovec): best cosine over the main and the side column.
++        const labCol = process.env.GBRAIN_LAB_CTX_RESCORE_COL;
++        if (labCol) {
++          const side = await sqlCosines(engine, chunkIds, labCol, queryEmbedding);
++          for (const [id, c] of side) cosines.set(id, Math.max(c, cosines.get(id) ?? -Infinity));
++        }
+       } catch (err) {
+         const sqlstate = (err as { code?: unknown } | null)?.code;
+         warnOncePerProcess('cosine-rescore-sql-fallback',
+diff --git a/src/core/search/fusion-lists.ts b/src/core/search/fusion-lists.ts
+index 3c7e79871..dd3f74e30 100644
+--- a/src/core/search/fusion-lists.ts
++++ b/src/core/search/fusion-lists.ts
+@@ -196,7 +196,8 @@ export function composeFusionLists(input: ComposeFusionListsInput): FusionListEn
+     } else if (isExpansionRole(arm.role) && expansionWeight !== undefined && arm.list.length > 0) {
+       out.push({ list: arm.list, k: textK, weight: expansionWeight, arm: label });
+     } else {
+-      out.push({ list: arm.list, k: textK, arm: label });
++      const labWeight = (arm as { labWeight?: number }).labWeight; // LAB ONLY (twovec)
++      out.push(labWeight !== undefined ? { list: arm.list, k: textK, weight: labWeight, arm: label } : { list: arm.list, k: textK, arm: label });
+     }
+   }
+   // Arm-confidence weighting (arm-confidence.ts): the keyword AND title
+diff --git a/src/core/search/hybrid/arms.ts b/src/core/search/hybrid/arms.ts
+index 86ef36b25..a03ac663d 100644
+--- a/src/core/search/hybrid/arms.ts
++++ b/src/core/search/hybrid/arms.ts
+@@ -552,6 +552,14 @@ export async function runVectorArms(
+           }
+         }
+         okLists.forEach((list, i) => pushVectorList(vectorArms, list, okRoles[i]));
++        // LAB ONLY (twovec): second text vector arm over a side column, same query vector.
++        const labCol = process.env.GBRAIN_LAB_CTX_COL;
++        if (labCol && originalOk && queryEmbedding) {
++          const labList = await engine.searchVector(queryEmbedding, { ...searchOpts, embeddingColumn: { ...resolvedCol, name: labCol } });
++          for (const r of labList) r.modality = r.modality ?? 'text';
++          const w = Number(process.env.GBRAIN_LAB_CTX_WEIGHT ?? '1');
++          vectorArms.push(Object.assign({ list: labList, role: 'original' as const }, w !== 1 ? { labWeight: w } : {}));
++        }
+         // 'both' mode: also include the image-side list as another input to
+         // RRF — only when a text arm survived, matching the pre-wave shape
+         // (a total text failure falls back to keyword-only either way).
